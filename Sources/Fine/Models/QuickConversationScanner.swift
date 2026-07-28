@@ -36,7 +36,7 @@ final class QuickConversationScanner: ObservableObject {
         self.transcriptsDirectory = transcriptsDirectory
     }
 
-    private static func defaultTranscriptsDirectory() -> URL {
+    static func defaultTranscriptsDirectory() -> URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let quickDirectory = home.appendingPathComponent("cld", isDirectory: true)
         let encodedProjectPath = quickDirectory.path.replacingOccurrences(of: "/", with: "-")
