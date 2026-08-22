@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         FineWindowRegistry.shared.persistWindowPresentations()
         AppTermination.isTerminating = true
+        // 자식 정리를 여기서 동기적으로 끝낸다. .terminateNow 이후에는 비동기 승격이
+        // 실행될 기회가 없어, 신호를 무시하는 자식이 launchd로 입양된 채 살아남는다.
+        FineWindowRegistry.shared.cleanupAllSessions(synchronous: true)
         return .terminateNow
     }
 }

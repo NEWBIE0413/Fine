@@ -17,18 +17,21 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     private var sessionId: String?
     private var identityTimer: Timer?
     private var titleCancellable: AnyCancellable?
+    private let configurationStorage: QuickSessionConfigurationStorage
 
     init(
         id: UUID = UUID(),
         name: String = QuickSessionPolicy.initialSessionName,
         launch: QuickLaunch = .blank,
-        configuration: QuickSessionConfiguration = .default
+        configuration: QuickSessionConfiguration = .default,
+        configurationStorage: QuickSessionConfigurationStorage = .shared
     ) {
         self.id = id
         self.name = name
         self.initialName = name
         self.launch = launch
         self.configuration = configuration
+        self.configurationStorage = configurationStorage
         if case .resume(let sessionId) = launch {
             self.sessionId = sessionId
         }
@@ -36,7 +39,11 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
 
     func getOrCreateTerminal() -> TerminalWebView {
         if let terminalView { return terminalView }
-        let view = TerminalWebView(frame: .zero, palette: .quickLight)
+        let view = TerminalWebView(
+            frame: .zero,
+            palette: .quickLight,
+            statusText: configuration.terminalStatus
+        )
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onUserInput = { [weak self] data in self?.pty?.write(data) }
         view.onResize = { [weak self] columns, rows in
@@ -138,6 +145,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
                   processIdentifier: processIdentifier
               ) else { return }
         sessionId = resolved
+        configurationStorage.saveIfAbsent(configuration, for: resolved)
         updateTitle(titlesBySessionId: QuickConversationScanner.shared.aiTitlesBySessionId)
         QuickConversationScanner.shared.rescan()
     }
@@ -175,6 +183,17 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         identityTimer = nil
         titleCancellable = nil
         pty?.terminate(force: force)
+        pty = nil
+        terminalView?.removeFromSuperview()
+        terminalView = nil
+    }
+
+    /// 앱 종료 경로 — 비동기 승격이 실행될 기회가 없으므로 동기적으로 종료한다.
+    func cleanupForTermination() {
+        identityTimer?.invalidate()
+        identityTimer = nil
+        titleCancellable = nil
+        pty?.terminateSynchronously()
         pty = nil
         terminalView?.removeFromSuperview()
         terminalView = nil

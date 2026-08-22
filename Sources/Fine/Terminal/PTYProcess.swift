@@ -6,6 +6,40 @@ enum PTYError: Error {
     case alreadyStarted
 }
 
+/// PID는 재사용된다. 유예를 두고 뒤늦게 SIGKILL을 보내는 경로에서는 그 사이에
+/// 자식이 회수되고 같은 번호가 무관한 프로세스에 배정됐을 수 있으므로, 신호 직전에
+/// "그때 그 프로세스가 맞는지" 확인해야 한다. 시작 시각은 PID와 달리 재사용되지
+/// 않으므로 이 대조로 무고한 프로세스를 죽이는 사고를 막는다.
+enum PTYProcessIdentity {
+    static func startTime(of processIdentifier: pid_t) -> timeval? {
+        guard processIdentifier > 0 else { return nil }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, processIdentifier]
+        let result = mib.withUnsafeMutableBufferPointer { buffer -> Int32 in
+            sysctl(buffer.baseAddress, u_int(buffer.count), &info, &size, nil, 0)
+        }
+        guard result == 0, size >= MemoryLayout<kinfo_proc>.stride else { return nil }
+        return info.kp_proc.p_starttime
+    }
+
+    static func matches(_ processIdentifier: pid_t, _ started: timeval?) -> Bool {
+        guard let started, let current = startTime(of: processIdentifier) else { return false }
+        return current.tv_sec == started.tv_sec && current.tv_usec == started.tv_usec
+    }
+}
+
+/// 자식 하나가 아니라 프로세스 그룹 전체에 보낸다 — 자식이 또 스폰한 손자까지
+/// 함께 정리하기 위해서다. forkpty가 자식을 세션 리더로 만들어 pid == pgid이므로
+/// -pid가 곧 그 그룹이다. 그룹 전송이 실패하면(그룹이 이미 비었거나 권한 문제)
+/// 자식 하나로 물러선다.
+@discardableResult
+func ptySignalChildGroup(_ processIdentifier: pid_t, _ signalNumber: Int32) -> Bool {
+    guard processIdentifier > 0 else { return false }
+    if kill(-processIdentifier, signalNumber) == 0 { return true }
+    return kill(processIdentifier, signalNumber) == 0
+}
+
 /// PTYProcess가 자식보다 먼저 해제돼 인스턴스의 DispatchSource가 취소되더라도
 /// 부모 프로세스 수명 동안 waitpid 소유권을 유지한다. 정상 exitSource가 먼저
 /// 회수하면 waitpid는 ECHILD로 끝나므로 두 경로의 경합은 안전하다.
@@ -25,6 +59,43 @@ enum PTYChildReaper {
             }
         }
     }
+
+    /// 신호를 보내고, 유예 안에 죽지 않으면 무시할 수 없는 SIGKILL로 승격한 뒤 회수한다.
+    ///
+    /// 승격이 필요한 이유: Claude Code는 SIGHUP과 SIGTERM을 모두 무시한다(실측 확인).
+    /// 신호 한 발을 쏘고 성공했다고 가정하면 대화를 닫아도 자식은 PTY 마스터만 잃은 채
+    /// 살아남아, UI로는 접근할 수 없으면서 메모리는 계속 점유하는 유령 프로세스가 된다.
+    ///
+    /// 승격 시점까지 이 함수가 회수를 하지 않았다면 자식은 좀비로 남아 PID가 예약된
+    /// 상태지만, exitSource 쪽이 먼저 회수했을 수 있으므로 시작 시각을 한 번 더 대조한다.
+    static func terminateAndReap(
+        _ processIdentifier: pid_t,
+        signal signalNumber: Int32,
+        identity: timeval?,
+        escalates: Bool,
+        grace: TimeInterval
+    ) {
+        guard processIdentifier > 0 else { return }
+        queue.async {
+            ptySignalChildGroup(processIdentifier, signalNumber)
+            var status: Int32 = 0
+            if escalates {
+                let deadline = Date().addingTimeInterval(grace)
+                while Date() < deadline {
+                    let reaped = waitpid(processIdentifier, &status, WNOHANG)
+                    if reaped == processIdentifier { return }
+                    if reaped < 0 && errno != EINTR { break }
+                    usleep(50_000)
+                }
+                if PTYProcessIdentity.matches(processIdentifier, identity) {
+                    ptySignalChildGroup(processIdentifier, SIGKILL)
+                }
+            }
+            while waitpid(processIdentifier, &status, 0) < 0 {
+                if errno != EINTR { return }
+            }
+        }
+    }
 }
 
 /// forkpty로 유저 셸을 스폰하고 마스터 fd 입출력을 중계한다.
@@ -34,8 +105,13 @@ final class PTYProcess {
     private(set) var isRunning = false
     var processIdentifier: pid_t? { pid > 0 ? pid : nil }
 
+    /// 신호를 무시하는 자식에게 SIGKILL을 승격하기까지 주는 유예.
+    private static let terminationGrace: TimeInterval = 3
+
     private var masterFD: Int32 = -1
     private var pid: pid_t = -1
+    /// PID 재사용을 걸러내기 위한 자식의 시작 시각. fork 직후 한 번만 기록한다.
+    private var childStartTime: timeval?
     private var readSource: DispatchSourceRead?
     private var exitSource: DispatchSourceProcess?
     private var writeSource: DispatchSourceWrite?
@@ -78,6 +154,7 @@ final class PTYProcess {
 
         masterFD = master
         pid = child
+        childStartTime = PTYProcessIdentity.startTime(of: child)
         isRunning = true
 
         // exit 시점에 남은 출력을 논블로킹으로 드레인하기 위해 필요.
@@ -229,20 +306,55 @@ final class PTYProcess {
         }
     }
 
+    /// force는 "확실히 닫는다"는 뜻이므로 신호 한 발로 끝내지 않는다. 직접 실행
+    /// Claude는 SIGHUP뿐 아니라 SIGTERM도 무시하므로, 유예 뒤에도 살아있으면
+    /// SIGKILL로 승격해야 유령 프로세스가 남지 않는다.
     func terminate(force: Bool = false) {
         guard pid > 0, isRunning else { return }
-        // 직접 실행 Claude는 SIGHUP을 처리해 생존할 수 있어 명시적인 닫기에는
-        // SIGTERM이 필요하다.
-        kill(pid, force ? SIGTERM : SIGHUP)
+        PTYChildReaper.terminateAndReap(
+            pid,
+            signal: force ? SIGTERM : SIGHUP,
+            identity: childStartTime,
+            // force가 아닌 호출부(restartIfDead/recoverFromCrash)는 곧바로 pty를
+            // 버리므로 승격은 deinit이 이어서 책임진다.
+            escalates: force,
+            grace: Self.terminationGrace
+        )
+    }
+
+    /// 앱 종료 경로 전용. 프로세스가 곧 사라져 비동기 승격이 실행될 기회가 없으므로,
+    /// 짧은 유예 안에서 동기적으로 마무리한다. 종료가 눈에 띄게 느려지지 않도록
+    /// 유예를 작게 잡고, 넘기면 곧장 SIGKILL로 승격한다.
+    func terminateSynchronously(timeout: TimeInterval = 0.5) {
+        guard pid > 0, isRunning else { return }
+        let target = pid
+        let identity = childStartTime
+        ptySignalChildGroup(target, SIGTERM)
+        var status: Int32 = 0
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let reaped = waitpid(target, &status, WNOHANG)
+            if reaped == target { return }
+            if reaped < 0 && errno != EINTR { break }
+            usleep(20_000)
+        }
+        guard PTYProcessIdentity.matches(target, identity) else { return }
+        ptySignalChildGroup(target, SIGKILL)
     }
 
     deinit {
         // fd는 readSource의 cancel handler가 닫는다 — 여기서 직접 close하지 않는다.
         // writeSource도 그 cancel handler 안에서 함께 정리되므로 별도로 취소할 필요가 없다.
         if pid > 0, isRunning {
-            let child = pid
-            kill(child, SIGHUP)
-            PTYChildReaper.reap(child)
+            // PTYProcess가 사라지면 이 자식과 대화할 수단이 영영 없어진다. 살려둘
+            // 이유가 없으므로, 신호를 무시하는 자식도 확실히 정리되도록 승격을 건다.
+            PTYChildReaper.terminateAndReap(
+                pid,
+                signal: SIGHUP,
+                identity: childStartTime,
+                escalates: true,
+                grace: Self.terminationGrace
+            )
         }
         readSource?.cancel()
         exitSource?.cancel()

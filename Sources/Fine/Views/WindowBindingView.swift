@@ -101,8 +101,8 @@ final class WindowBindingNSView: NSView {
             window.styleMask.insert(.fullSizeContentView)
             window.titlebarSeparatorStyle = .none
             window.isMovableByWindowBackground = true
-            window.isOpaque = true
-            window.backgroundColor = .windowBackgroundColor
+            window.isOpaque = false
+            window.backgroundColor = .clear
             window.identifier = WindowIdentity.identifier(for: appState.windowStateID)
             window.setFrameAutosaveName(WindowIdentity.frameAutosaveName(for: appState.windowStateID))
             restorePresentation(window: window, appState: appState)
@@ -153,6 +153,19 @@ final class WindowBindingNSView: NSView {
                 self?.scheduleSave()
             }
         }
+        // 창을 통째로 닫는 경로에는 정리 훅이 없었다 — 대화를 하나씩 닫을 때만
+        // 자식이 종료되고, 창을 닫으면 살아남아 유령 프로세스가 됐다. 앱 종료 시에는
+        // applicationShouldTerminate가 동기 경로로 따로 처리하므로 여기서는 건너뛴다.
+        observers.append(
+            center.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                guard !AppTermination.isTerminating else { return }
+                self?.appState?.cleanupAllSessions()
+            }
+        )
     }
 
     private func removeObservers() {

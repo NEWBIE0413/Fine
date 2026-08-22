@@ -3,6 +3,7 @@ import Foundation
 
 final class AppState: ObservableObject {
     private let storage: WindowStateStorage
+    private let configurationStorage: QuickSessionConfigurationStorage
     let windowStateID: UUID
     private(set) var restoredFrame: WindowFrameState?
     private(set) var restoredIsZoomed = false
@@ -14,8 +15,13 @@ final class AppState: ObservableObject {
     }
     private var selectedSessionObservation: AnyCancellable?
 
-    init(requestedWindowStateID: UUID? = nil, storage: WindowStateStorage = .shared) {
+    init(
+        requestedWindowStateID: UUID? = nil,
+        storage: WindowStateStorage = .shared,
+        configurationStorage: QuickSessionConfigurationStorage = .shared
+    ) {
         self.storage = storage
+        self.configurationStorage = configurationStorage
         let claimed = requestedWindowStateID.flatMap { storage.claim(id: $0) }
             ?? (requestedWindowStateID == nil ? storage.claimNext() : nil)
         if let claimed {
@@ -58,10 +64,25 @@ final class AppState: ObservableObject {
         } else {
             launch = .blank
         }
-        let session = TerminalSession(launch: launch, configuration: configuration)
+        let session = TerminalSession(
+            launch: launch,
+            configuration: configuration,
+            configurationStorage: configurationStorage
+        )
         sessions.append(session)
         selectSession(session)
         session.startImmediately()
+    }
+
+    func resumeConversation(_ conversation: QuickConversation) {
+        if let existing = sessions.first(where: { $0.matchesConversation(sessionId: conversation.id) }) {
+            selectSession(existing)
+            return
+        }
+        addSession(
+            resumeSessionId: conversation.id,
+            configuration: resumeConfiguration(for: conversation.id)
+        )
     }
 
     func resumeConversation(sessionId: String) {
@@ -69,7 +90,14 @@ final class AppState: ObservableObject {
             selectSession(existing)
             return
         }
-        addSession(resumeSessionId: sessionId)
+        addSession(
+            resumeSessionId: sessionId,
+            configuration: resumeConfiguration(for: sessionId)
+        )
+    }
+
+    private func resumeConfiguration(for sessionID: String) -> QuickSessionConfiguration {
+        configurationStorage.configuration(for: sessionID) ?? .default
     }
 
     func showHome() {
@@ -81,6 +109,23 @@ final class AppState: ObservableObject {
         sessions.removeAll { $0.id == session.id }
         if selectedSession?.id == session.id {
             selectedSession = sessions.first
+        }
+    }
+
+    /// 창이 닫히거나 앱이 종료될 때 이 창의 모든 세션을 정리한다.
+    /// 이 경로가 없으면 대화를 하나씩 닫았을 때만 자식이 정리되고, 창을 통째로
+    /// 닫으면 deinit의 SIGHUP만 받은 자식들이 그대로 살아남는다.
+    /// synchronous는 앱 종료 경로 — 비동기 승격을 기다릴 수 없을 때 쓴다.
+    func cleanupAllSessions(synchronous: Bool = false) {
+        let closing = sessions
+        sessions.removeAll()
+        selectedSession = nil
+        for session in closing {
+            if synchronous {
+                session.cleanupForTermination()
+            } else {
+                session.cleanup(force: true)
+            }
         }
     }
 

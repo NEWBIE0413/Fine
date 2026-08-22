@@ -58,6 +58,19 @@ final class QuickConversationScannerTests: XCTestCase {
         XCTAssertEqual(result[0].id, resumed.deletingPathExtension().lastPathComponent)
     }
 
+    func testAssistantModelsDoNotAffectLegacyConversationMetadata() throws {
+        _ = try writeTranscript([
+            #"{"type":"user","message":{"content":"공부 대화"}}"#,
+            #"{"type":"assistant","message":{"model":"claude-codex-gpt-5.6-sol","role":"assistant"}}"#,
+            #"{"type":"assistant","message":{"model":"claude-gemini-gemini-3.7-flash-high","role":"assistant"}}"#,
+        ], modifiedAt: Date())
+
+        let conversation = try XCTUnwrap(
+            QuickConversationScanner.scan(directory: directory).first
+        )
+        XCTAssertEqual(conversation.title, "공부 대화")
+    }
+
     private func writeTranscript(_ lines: [String], modifiedAt: Date) throws -> URL {
         let url = directory.appendingPathComponent("\(UUID().uuidString).jsonl")
         try (lines.joined(separator: "\n") + "\n").write(

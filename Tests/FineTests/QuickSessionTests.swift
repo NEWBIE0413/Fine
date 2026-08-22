@@ -40,6 +40,7 @@ final class QuickSessionTests: XCTestCase {
             "PATH": "/usr/bin",
             "ANTHROPIC_BASE_URL": "http://stale.example",
             "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
+            "CLAUDE_CODE_CHILD_SESSION": "1",
         ]
         let direct = QuickSessionPolicy.applyingEnvironment(
             inherited,
@@ -48,6 +49,9 @@ final class QuickSessionTests: XCTestCase {
         )
         XCTAssertNil(direct["ANTHROPIC_BASE_URL"])
         XCTAssertNil(direct["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"])
+        XCTAssertNil(direct["CLAUDE_CODE_CHILD_SESSION"])
+        XCTAssertEqual(direct["CLAUDE_CODE_FORCE_SESSION_PERSISTENCE"], "1")
+        XCTAssertEqual(direct["CCV_PROXY"], "0")
         XCTAssertEqual(direct["SM_CCV"], QuickSessionPolicy.ccvExecutablePath)
         XCTAssertTrue(direct["PATH"]?.hasPrefix(NSHomeDirectory() + "/.local/bin:/opt/homebrew/bin:") == true)
 
@@ -61,6 +65,7 @@ final class QuickSessionTests: XCTestCase {
             )
         )
         XCTAssertEqual(proxy["ANTHROPIC_BASE_URL"], "http://127.0.0.1:4141")
+        XCTAssertEqual(proxy["CCV_PROXY"], "1")
         XCTAssertEqual(proxy["SM_MODEL"], "claude-codex-gpt-5.6-terra")
         XCTAssertEqual(proxy["SM_EFFORT"], "xhigh")
     }
@@ -76,6 +81,19 @@ final class QuickSessionTests: XCTestCase {
         XCTAssertNil(state.selectedSession)
         XCTAssertEqual(state.sessions.map(\.id), [session.id])
         session.cleanup()
+    }
+
+    func testResumeLaunchForcesTopLevelTranscriptPersistence() {
+        let sessionId = UUID().uuidString.lowercased()
+        let environment = QuickSessionPolicy.applyingEnvironment(
+            ["CLAUDE_CODE_CHILD_SESSION": "1"],
+            launch: .resume(sessionId: sessionId),
+            configuration: .default
+        )
+
+        XCTAssertNil(environment["CLAUDE_CODE_CHILD_SESSION"])
+        XCTAssertEqual(environment["CLAUDE_CODE_FORCE_SESSION_PERSISTENCE"], "1")
+        XCTAssertEqual(environment["SM_RESUME_SESSION_ID"], sessionId)
     }
 
     func testRecentConversationSelectsAlreadyOpenResumeSession() {

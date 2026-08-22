@@ -12,27 +12,28 @@ struct QuickSidebarView: View {
                 appState.showHome()
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: SidebarMetrics.iconSize))
-                        .foregroundColor(.primary)
-                        .frame(width: SidebarMetrics.iconFrame)
+                    Image(systemName: "plus")
+                        .font(.system(size: FineTheme.iconSize, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: FineTheme.iconFrame)
                     Text("새 대화")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.primary)
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, SidebarMetrics.rowVerticalPadding)
-                .padding(.horizontal, SidebarMetrics.rowHorizontalPadding)
+                .padding(.vertical, FineTheme.rowVerticalPadding)
+                .padding(.horizontal, FineTheme.rowHorizontalPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: SidebarMetrics.rowCornerRadius, style: .continuous)
-                        .fill(isHoveringNew ? Color.primary.opacity(0.04) : Color.primary.opacity(0.02))
+                    RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                        .fill(isHoveringNew ? FineTheme.hoverFill : .clear)
                 )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 8)
-            .padding(.top, 16)
+            .padding(.horizontal, FineTheme.sidebarInset)
+            .padding(.top, FineTheme.titlebarClearance)
             .onHover { isHoveringNew = $0 }
+            .animation(.easeOut(duration: 0.14), value: isHoveringNew)
 
             if !appState.sessions.isEmpty {
                 QuickSectionHeader(title: "열린 대화") {
@@ -54,9 +55,9 @@ struct QuickSidebarView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, FineTheme.sidebarInset)
                 }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: 208)
             }
 
             QuickSectionHeader(title: "최근 항목") {
@@ -65,7 +66,7 @@ struct QuickSidebarView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary.opacity(0.9))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("최근 대화 새로고침")
@@ -75,8 +76,8 @@ struct QuickSidebarView: View {
                 if recentScanner.conversations.isEmpty {
                     Text("최근 대화가 없습니다")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary.opacity(0.9))
-                        .padding(.horizontal, 16)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, FineTheme.sidebarInset)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -86,19 +87,19 @@ struct QuickSidebarView: View {
                                 QuickRecentConversationRow(
                                     conversation: conversation,
                                     onResume: {
-                                        appState.resumeConversation(sessionId: conversation.id)
+                                        appState.resumeConversation(conversation)
                                     }
                                 )
                             }
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, FineTheme.sidebarInset)
                     }
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .frame(maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background { GlassSidebarBackground() }
         .onAppear {
             recentScanner.start()
             recentScanner.rescan()
@@ -116,24 +117,24 @@ private struct QuickSessionRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "bubble.left")
-                .font(.system(size: SidebarMetrics.iconSize, weight: .medium))
-                .foregroundColor(.secondary.opacity(0.9))
-                .frame(width: SidebarMetrics.iconFrame)
+                .font(.system(size: FineTheme.iconSize, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: FineTheme.iconFrame)
 
             Text(session.name)
                 .font(.system(size: 13, weight: isSelected ? .bold : .medium))
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
 
             Spacer(minLength: 0)
 
             Circle()
-                .fill(session.isRunning ? Color.green : Color.gray.opacity(0.5))
-                .frame(width: 6, height: 6)
+                .fill(session.isRunning ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.35))
+                .frame(width: 5, height: 5)
 
             Button(action: onClose) {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.9))
+                    .foregroundStyle(.secondary)
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
             }
@@ -141,21 +142,25 @@ private struct QuickSessionRow: View {
             .help("대화 종료")
             .opacity(isHovering || isSelected ? 1 : 0)
         }
-        .padding(.vertical, SidebarMetrics.rowVerticalPadding)
-        .padding(.horizontal, SidebarMetrics.rowHorizontalPadding)
+        .padding(.vertical, FineTheme.rowVerticalPadding)
+        .padding(.horizontal, FineTheme.rowHorizontalPadding)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: SidebarMetrics.rowCornerRadius, style: .continuous)
-                    .fill(Color(nsColor: .textBackgroundColor))
-                    .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 1)
+                RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                    .fill(FineTheme.selectedFill)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                            .stroke(FineTheme.selectedRim, lineWidth: 1)
+                    }
             } else if isHovering {
-                RoundedRectangle(cornerRadius: SidebarMetrics.rowCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
+                RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                    .fill(FineTheme.hoverFill)
             }
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
         .onTapGesture(perform: onSelect)
+        .animation(.easeOut(duration: 0.14), value: isHovering)
     }
 }
 
@@ -167,27 +172,27 @@ private struct QuickRecentConversationRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "bubble.left")
-                .font(.system(size: SidebarMetrics.iconSize, weight: .medium))
-                .foregroundColor(.secondary.opacity(0.9))
-                .frame(width: SidebarMetrics.iconFrame)
+                .font(.system(size: FineTheme.iconSize, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: FineTheme.iconFrame)
 
             Text(conversation.title)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.primary.opacity(0.95))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
 
             Spacer(minLength: 4)
 
             Text(relativeTime(conversation.modifiedAt))
                 .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.secondary.opacity(0.85))
+                .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
-        .padding(.vertical, SidebarMetrics.rowVerticalPadding)
-        .padding(.horizontal, SidebarMetrics.rowHorizontalPadding)
+        .padding(.vertical, FineTheme.rowVerticalPadding)
+        .padding(.horizontal, FineTheme.rowHorizontalPadding)
         .background(
-            RoundedRectangle(cornerRadius: SidebarMetrics.rowCornerRadius, style: .continuous)
-                .fill(isHovering ? Color.primary.opacity(0.04) : Color.clear)
+            RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                .fill(isHovering ? FineTheme.hoverFill : Color.clear)
         )
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
@@ -197,6 +202,7 @@ private struct QuickRecentConversationRow: View {
             }
         }
         .help("이 대화 재개")
+        .animation(.easeOut(duration: 0.14), value: isHovering)
     }
 
     private func relativeTime(_ date: Date) -> String {

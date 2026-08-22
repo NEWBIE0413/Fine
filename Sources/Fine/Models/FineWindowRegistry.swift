@@ -54,6 +54,15 @@ final class FineWindowRegistry {
         }
     }
 
+    /// 앱 종료 시 살아있는 모든 창의 세션을 정리한다. 이 경로가 없으면 자식들이
+    /// launchd로 입양돼 그대로 살아남는다 — SIGHUP은 무시되기 때문이다.
+    func cleanupAllSessions(synchronous: Bool) {
+        removeDeadEntries()
+        for entry in entries {
+            entry.state?.cleanupAllSessions(synchronous: synchronous)
+        }
+    }
+
     private func removeDeadEntries() {
         entries.removeAll { $0.state == nil }
     }

@@ -84,6 +84,7 @@ final class TerminalWebView: NSView {
     private(set) var lastRows: UInt16 = 24
 
     private let palette: TerminalPalette
+    private let statusText: String
     private let webView: WKWebView
     private var isReady = false
     private var pendingOutput = Data()
@@ -92,11 +93,16 @@ final class TerminalWebView: NSView {
     private var lastFlushTime: CFTimeInterval = 0
 
     override convenience init(frame: NSRect) {
-        self.init(frame: frame, palette: .quickLight)
+        self.init(
+            frame: frame,
+            palette: .quickLight,
+            statusText: QuickSessionConfiguration.default.terminalStatus
+        )
     }
 
-    init(frame: NSRect, palette: TerminalPalette) {
+    init(frame: NSRect, palette: TerminalPalette, statusText: String) {
         self.palette = palette
+        self.statusText = statusText
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: frame, configuration: config)
         super.init(frame: frame)
@@ -248,6 +254,7 @@ final class TerminalWebView: NSView {
             }
             isReady = true
             applyTheme()
+            applyStatus()
             flushOutput()
             webView.evaluateJavaScript("window.smFit && window.smFit()", completionHandler: nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -268,6 +275,12 @@ final class TerminalWebView: NSView {
         default:
             break
         }
+    }
+
+    private func applyStatus() {
+        guard let data = try? JSONEncoder().encode([statusText]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.smSetStatus(\(json)[0])", completionHandler: nil)
     }
 
     fileprivate func handleWebProcessCrash() {

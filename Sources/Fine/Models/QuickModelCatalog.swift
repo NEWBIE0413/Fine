@@ -32,6 +32,14 @@ struct QuickModelOption: Codable, Hashable, Identifiable, Sendable {
         id.hasPrefix("claude-codex-")
     }
 
+    var isKimi: Bool {
+        id.hasPrefix("claude-kimi-")
+    }
+
+    var isGemini: Bool {
+        id.hasPrefix("claude-gemini-")
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case displayName = "display_name"
@@ -59,7 +67,7 @@ struct QuickModelOption: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-struct QuickSessionConfiguration: Equatable {
+struct QuickSessionConfiguration: Codable, Equatable, Sendable {
     let modelID: String
     let effort: QuickEffort
     let proxyEnabled: Bool
@@ -71,8 +79,34 @@ struct QuickSessionConfiguration: Equatable {
     )
 
     var usesProxy: Bool {
-        proxyEnabled || modelID.hasPrefix("claude-codex-")
+        proxyEnabled
+            || modelID.hasPrefix("claude-codex-")
+            || modelID.hasPrefix("claude-kimi-")
+            || modelID.hasPrefix("claude-gemini-")
     }
+
+    var terminalStatus: String {
+        let provider: String
+        let model: String
+        if modelID.hasPrefix("claude-codex-") {
+            provider = "Codex"
+            model = String(modelID.dropFirst("claude-codex-".count))
+        } else if modelID.hasPrefix("claude-kimi-") {
+            provider = "Kimi"
+            model = String(modelID.dropFirst("claude-kimi-".count))
+        } else if modelID.hasPrefix("claude-gemini-") {
+            provider = "Gemini"
+            model = String(modelID.dropFirst("claude-gemini-".count))
+        } else {
+            provider = "Claude"
+            model = modelID.hasPrefix("claude-")
+                ? String(modelID.dropFirst("claude-".count))
+                : modelID
+        }
+        let conciseModel = model.hasSuffix("[1m]") ? String(model.dropLast(4)) : model
+        return "\(provider) · \(conciseModel)  /  effort \(effort.rawValue)"
+    }
+
 }
 
 enum QuickComposerPreferences {

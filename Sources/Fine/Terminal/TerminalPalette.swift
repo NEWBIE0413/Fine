@@ -4,30 +4,30 @@ import Foundation
 struct TerminalPalette: Equatable {
     let colors: [String: String]
 
-    /// 흰 배경에서 bright 색까지 읽히도록 명도를 눌러 잡은 라이트 ANSI 16색.
-    /// Solarized처럼 배경을 착색하지 않고, 표준 ANSI 의미색을 유지한다.
+    /// Fine 라이트 모드에서는 ANSI 장식색도 모두 검정으로 고정한다.
+    /// Claude의 전체 화면 재도장 순서에 따라 글자색이 오가는 시각 회귀를 막는다.
     static let quickLight = TerminalPalette(colors: [
         "background": "#ffffff",
-        "foreground": "#202124",
-        "cursor": "#202124",
+        "foreground": "#000000",
+        "cursor": "#000000",
         "cursorAccent": "#ffffff",
         "selectionBackground": "#c2dbff",
-        "black": "#202124",
-        "red": "#b3261e",
-        "green": "#137333",
-        "yellow": "#7a5d00",
-        "blue": "#185abc",
-        "magenta": "#7b1fa2",
-        "cyan": "#007c83",
-        "white": "#e8eaed",
-        "brightBlack": "#5f6368",
-        "brightRed": "#d93025",
-        "brightGreen": "#188038",
-        "brightYellow": "#8a6500",
-        "brightBlue": "#1a73e8",
-        "brightMagenta": "#9334e6",
-        "brightCyan": "#00838f",
-        "brightWhite": "#ffffff",
+        "black": "#000000",
+        "red": "#000000",
+        "green": "#000000",
+        "yellow": "#000000",
+        "blue": "#000000",
+        "magenta": "#000000",
+        "cyan": "#000000",
+        "white": "#000000",
+        "brightBlack": "#000000",
+        "brightRed": "#000000",
+        "brightGreen": "#000000",
+        "brightYellow": "#000000",
+        "brightBlue": "#000000",
+        "brightMagenta": "#000000",
+        "brightCyan": "#000000",
+        "brightWhite": "#000000",
     ])
 
     var json: String? {

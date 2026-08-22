@@ -16,12 +16,14 @@ final class QuickModelSelectionTests: XCTestCase {
         XCTAssertFalse(catalog.models.contains(where: \.isCodex))
     }
 
-    func testGatewayResponseDecodesClaudeAndCodexModelsOnlyOnce() throws {
+    func testGatewayResponseDecodesClaudeCodexKimiAndGeminiModelsOnlyOnce() throws {
         let data = Data(#"""
         {
           "data": [
             {"id":"claude-sonnet-5","display_name":"Claude Sonnet 5","supported_efforts":["low","high","max"]},
             {"id":"claude-codex-gpt-5.6-terra","display_name":"Codex · GPT-5.6-Terra","supported_efforts":["low","ultra"]},
+            {"id":"claude-kimi-k3[1m]","display_name":"Kimi · K3","supported_efforts":["low","high","max"]},
+            {"id":"claude-gemini-gemini-3-flash[1m]","display_name":"Gemini · Gemini 3 Flash","supported_efforts":["low","medium","high"]},
             {"id":"claude-sonnet-5","display_name":"Duplicate"},
             {"id":"other-model","display_name":"Ignored"}
           ]
@@ -33,11 +35,17 @@ final class QuickModelSelectionTests: XCTestCase {
         XCTAssertEqual(models.map(\.id), [
             "claude-sonnet-5",
             "claude-codex-gpt-5.6-terra",
+            "claude-kimi-k3[1m]",
+            "claude-gemini-gemini-3-flash[1m]",
         ])
         XCTAssertFalse(models[0].isCodex)
         XCTAssertTrue(models[1].isCodex)
+        XCTAssertTrue(models[2].isKimi)
+        XCTAssertTrue(models[3].isGemini)
         XCTAssertEqual(models[0].supportedEfforts, [.low, .high, .max])
         XCTAssertEqual(models[1].supportedEfforts, [.low, .ultra])
+        XCTAssertEqual(models[2].supportedEfforts, [.low, .high, .max])
+        XCTAssertEqual(models[3].supportedEfforts, [.low, .medium, .high])
     }
 
     func testCodexSelectionAlwaysUsesProxyWhileClaudeCanStayDirect() {
@@ -55,6 +63,39 @@ final class QuickModelSelectionTests: XCTestCase {
                 effort: .low,
                 proxyEnabled: false
             ).usesProxy
+        )
+        XCTAssertTrue(
+            QuickSessionConfiguration(
+                modelID: "claude-kimi-k3[1m]",
+                effort: .high,
+                proxyEnabled: false
+            ).usesProxy
+        )
+        XCTAssertTrue(
+            QuickSessionConfiguration(
+                modelID: "claude-gemini-gemini-3-flash[1m]",
+                effort: .high,
+                proxyEnabled: false
+            ).usesProxy
+        )
+    }
+
+    func testTerminalStatusShowsProviderModelAndEffort() {
+        XCTAssertEqual(
+            QuickSessionConfiguration(
+                modelID: "claude-kimi-k3[1m]",
+                effort: .high,
+                proxyEnabled: false
+            ).terminalStatus,
+            "Kimi · k3  /  effort high"
+        )
+        XCTAssertEqual(
+            QuickSessionConfiguration(
+                modelID: "claude-sonnet-5",
+                effort: .low,
+                proxyEnabled: false
+            ).terminalStatus,
+            "Claude · sonnet-5  /  effort low"
         )
     }
 

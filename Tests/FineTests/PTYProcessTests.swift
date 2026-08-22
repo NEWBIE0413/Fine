@@ -120,6 +120,51 @@ final class PTYProcessTests: XCTestCase {
         XCTAssertFalse(pty.isRunning)
     }
 
+    /// 회귀: 자식이 SIGTERM/SIGHUP을 모두 무시해도 force 종료는 끝까지 책임져야 한다.
+    /// 직접 실행 Claude가 정확히 이렇게 동작한다 — 승격이 없던 시절에는 대화를 닫아도
+    /// 자식이 PTY 마스터만 잃은 채 살아남아, UI로는 접근할 수 없으면서 메모리는 계속
+    /// 점유하는 유령 프로세스가 됐다. /bin/cat은 SIGTERM에 그냥 죽어서 이 경로를
+    /// 재현하지 못하므로, 신호를 무시하는 자식을 따로 세운다.
+    func testForceTerminateKillsChildIgnoringTermAndHup() throws {
+        let pty = PTYProcess()
+        try pty.start(
+            executable: "/bin/sh", execName: "sh",
+            arguments: ["-c", "trap '' TERM HUP; while :; do sleep 1; done"],
+            environment: ["TERM": "xterm-256color"],
+            workingDirectory: NSHomeDirectory(), cols: 80, rows: 24
+        )
+        let child = try XCTUnwrap(pty.processIdentifier)
+        defer {
+            if kill(child, 0) == 0 {
+                _ = kill(-child, SIGKILL)
+                _ = kill(child, SIGKILL)
+                var cleanupStatus: Int32 = 0
+                _ = waitpid(child, &cleanupStatus, 0)
+            }
+        }
+
+        // 전제 확인: 무시되는 신호만으로는 죽지 않아야 이 테스트가 승격을 검증한다.
+        // trap이 걸리기 전에 신호가 도착하면 자식이 죽어 전제가 깨지므로 잠시 기다린다.
+        usleep(500_000)
+        XCTAssertEqual(kill(child, SIGTERM), 0)
+        usleep(300_000)
+        XCTAssertEqual(kill(child, 0), 0, "SIGTERM을 무시하는 자식이어야 승격을 검증할 수 있다")
+
+        pty.terminate(force: true)
+
+        // 유예(3초)를 넘긴 뒤 SIGKILL로 승격되고, terminateAndReap이 회수까지 끝내면
+        // PID가 풀려 ESRCH가 된다. 좀비로만 남으면 kill(pid, 0)은 계속 0이므로,
+        // 이 단언은 "승격 + 회수"를 함께 검증한다.
+        let deadline = Date().addingTimeInterval(8)
+        var died = false
+        while Date() < deadline {
+            errno = 0
+            if kill(child, 0) == -1, errno == ESRCH { died = true; break }
+            usleep(50_000)
+        }
+        XCTAssertTrue(died, "SIGTERM을 무시하는 자식은 SIGKILL로 승격돼 정리돼야 한다")
+    }
+
     /// 큰 페이로드를 단일 write() 호출로 보내 pending-write/EAGAIN 경로에서
     /// tail이 잘리지 않는지 검증한다. EAGAIN이 실제로 발생하는지는 tty 입력 버퍼
     /// 크기에 달려 있어 보장할 수 없지만, 만약 구현이 다시 "n <= 0이면 그냥 중단"

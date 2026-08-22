@@ -13,10 +13,9 @@ struct ContentView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
             QuickSidebarView()
-                .frame(width: 240)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .frame(width: FineTheme.sidebarWidth)
 
             Group {
                 if let session = appState.selectedSession {
@@ -26,14 +25,9 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .shadow(color: .black.opacity(0.10), radius: 8, x: 0, y: 4)
+            .background(FineTheme.workspace)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
-        .padding(.top, 36)
-        .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
+        .background(Color.clear)
         .ignoresSafeArea(.container, edges: .top)
         .background {
             WindowBindingView(appState: appState, title: appState.windowTitle)

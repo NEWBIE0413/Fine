@@ -56,6 +56,7 @@ enum QuickSessionPolicy {
             "SM_CCV": ccvExecutablePath.replacingOccurrences(of: "\0", with: ""),
             "SM_MODEL": configuration.modelID.replacingOccurrences(of: "\0", with: ""),
             "SM_EFFORT": configuration.effort.rawValue,
+            "CCV_PROXY": configuration.usesProxy ? "1" : "0",
         ]
         switch launch {
         case .blank:
@@ -87,6 +88,11 @@ enum QuickSessionPolicy {
             guard !path.isEmpty, !paths.contains(path) else { return }
             paths.append(path)
         }.joined(separator: ":")
+        // A Fine conversation is a top-level resumable session even when the app
+        // was launched from inside Claude Code. Do not inherit the parent's child
+        // marker, and explicitly keep transcripts for future resume launches.
+        result.removeValue(forKey: "CLAUDE_CODE_CHILD_SESSION")
+        result["CLAUDE_CODE_FORCE_SESSION_PERSISTENCE"] = "1"
         // A direct Claude session must stay direct even if Fine itself
         // was launched from a shell that happened to have gateway variables.
         result.removeValue(forKey: "ANTHROPIC_BASE_URL")
