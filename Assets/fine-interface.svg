@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Fine macOS conversation workspace</title>
+  <desc id="desc">A translucent conversation sidebar beside a clean white terminal workspace.</desc>
+  <defs>
+    <linearGradient id="desktop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d7e1e6"/>
+      <stop offset=".48" stop-color="#f1e9df"/>
+      <stop offset="1" stop-color="#c9d5d2"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#eef0ed" stop-opacity=".54"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="34" flood-color="#273033" flood-opacity=".18"/>
+    </filter>
+    <clipPath id="window">
+      <rect x="90" y="70" width="1260" height="760" rx="24"/>
+    </clipPath>
+  </defs>
+  <rect width="1440" height="900" fill="url(#desktop)"/>
+  <circle cx="1210" cy="110" r="250" fill="#ffffff" opacity=".24"/>
+  <circle cx="160" cy="820" r="330" fill="#aabfc2" opacity=".18"/>
+  <g filter="url(#shadow)">
+    <rect x="90" y="70" width="1260" height="760" rx="24" fill="#fff"/>
+  </g>
+  <g clip-path="url(#window)">
+    <rect x="90" y="70" width="288" height="760" fill="url(#glass)"/>
+    <rect x="377" y="70" width="1" height="760" fill="#111" opacity=".12"/>
+    <rect x="378" y="70" width="972" height="760" fill="#fff"/>
+    <circle cx="122" cy="98" r="6" fill="#ff5f57"/>
+    <circle cx="143" cy="98" r="6" fill="#febc2e"/>
+    <circle cx="164" cy="98" r="6" fill="#28c840"/>
+    <text x="122" y="159" fill="#1b1d1e" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="650">+  새 대화</text>
+    <text x="112" y="219" fill="#1b1d1e" opacity=".46" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="650" letter-spacing=".6">열린 대화</text>
+    <rect x="106" y="238" width="256" height="64" rx="13" fill="#fff" opacity=".74"/>
+    <rect x="118" y="254" width="24" height="24" rx="7" fill="#17191a"/>
+    <path d="M125 263h10M125 268h7" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>
+    <text x="154" y="261" fill="#17191a" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="650">라우터 세션</text>
+    <text x="154" y="282" fill="#17191a" opacity=".45" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11">Kimi · k3 · high</text>
+    <circle cx="341" cy="270" r="3" fill="#17191a" opacity=".55"/>
+    <text x="112" y="371" fill="#1b1d1e" opacity=".46" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="650" letter-spacing=".6">최근 항목</text>
+    <g fill="#1b1d1e" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13">
+      <text x="126" y="414">모델 라우팅 정리</text>
+      <text x="126" y="458">터미널 렌더링 개선</text>
+      <text x="126" y="502">세션 복원 확인</text>
+    </g>
+    <g fill="none" stroke="#1b1d1e" stroke-width="1.4" opacity=".46">
+      <path d="M111 402h8v7h-4l-3 3v-3h-1z"/>
+      <path d="M111 446h8v7h-4l-3 3v-3h-1z"/>
+      <path d="M111 490h8v7h-4l-3 3v-3h-1z"/>
+    </g>
+    <g transform="translate(414 126)">
+      <text x="0" y="0" fill="#111" font-family="SFMono-Regular, Menlo, monospace" font-size="14">❯ 현재 모델과 effort를 확인해줘</text>
+      <text x="0" y="48" fill="#111" font-family="SFMono-Regular, Menlo, monospace" font-size="14">● 현재 세션은 Kimi K3, effort high로 실행 중입니다.</text>
+      <text x="0" y="96" fill="#111" font-family="SFMono-Regular, Menlo, monospace" font-size="14">  transcript를 유지한 채 native Claude Code 도구를 사용합니다.</text>
+      <rect x="0" y="142" width="808" height="118" rx="4" fill="#f7f7f5"/>
+      <text x="18" y="173" fill="#151718" font-family="SFMono-Regular, Menlo, monospace" font-size="13">Sources/Fine/</text>
+      <text x="18" y="202" fill="#151718" opacity=".72" font-family="SFMono-Regular, Menlo, monospace" font-size="13">├── Models/     transcript + session policy</text>
+      <text x="18" y="229" fill="#151718" opacity=".72" font-family="SFMono-Regular, Menlo, monospace" font-size="13">├── Terminal/   PTY + xterm bridge</text>
+      <text x="18" y="256" fill="#151718" opacity=".72" font-family="SFMono-Regular, Menlo, monospace" font-size="13">└── Views/      native macOS workspace</text>
+      <text x="0" y="330" fill="#111" font-family="SFMono-Regular, Menlo, monospace" font-size="14">❯ 새 대화를 시작합니다</text>
+      <rect x="0" y="620" width="884" height="1" fill="#111" opacity=".10"/>
+      <text x="0" y="648" fill="#111" opacity=".48" font-family="SFMono-Regular, Menlo, monospace" font-size="11">Kimi · k3  /  effort high</text>
+    </g>
+  </g>
+</svg>
