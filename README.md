@@ -1,6 +1,8 @@
 # Fine
 
-![Fine interface](Assets/fine-interface.svg)
+[![Fine demo — click to watch the full video](Assets/fine-demo.gif)](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
+
+[Watch the full demo · 1080p / 60 fps](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
 
 Fine is a lightweight native macOS workspace for long-running agent
 conversations. It combines a translucent conversation index with a focused
