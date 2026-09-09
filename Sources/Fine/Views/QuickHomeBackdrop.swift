@@ -98,13 +98,6 @@ struct QuickHomeComposer<Controls: View>: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.white.opacity(reduceTransparency ? 1 : 0.82))
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(
-                    isPromptFocused ? Color.black.opacity(0.18) : Color.white.opacity(0.95),
-                    lineWidth: 1
-                )
-        }
         .shadow(color: Color(red: 0.27, green: 0.30, blue: 0.26).opacity(0.07), radius: 24, y: 10)
         .onAppear { isPromptFocused = true }
     }

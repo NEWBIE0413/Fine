@@ -9,6 +9,7 @@ enum FineTheme {
     static let rowHorizontalPadding: CGFloat = 10
     static let iconSize: CGFloat = 12
     static let iconFrame: CGFloat = 16
+    static let compactControlHeight: CGFloat = 30
     static let compactControlRadius: CGFloat = 7
     static let composerCornerRadius: CGFloat = 14
     static let homeContentWidth: CGFloat = 680

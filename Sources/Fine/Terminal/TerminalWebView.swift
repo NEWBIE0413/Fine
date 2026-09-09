@@ -213,6 +213,17 @@ final class TerminalWebView: NSView {
         webView.evaluateJavaScript("window.smFocus()", completionHandler: nil)
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        // Reparenting a retained WKWebView can leave its compositor blank even
+        // when its size and terminal buffer are unchanged. Refresh once attached.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window != nil, self.isReady else { return }
+            self.webView.evaluateJavaScript("window.smRefresh && window.smRefresh()", completionHandler: nil)
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         focusTerminal()
         super.mouseDown(with: event)
@@ -231,7 +242,8 @@ final class TerminalWebView: NSView {
     /// 전체 ANSI 팔레트는 TerminalPalette 한 경로에서 갱신한다.
     private func applyTheme() {
         guard let theme = palette.json else { return }
-        webView.evaluateJavaScript("window.smSetTheme(\(theme))", completionHandler: nil)
+        let contrast = palette.minimumContrastRatio > 1 ? ", \(palette.minimumContrastRatio)" : ""
+        webView.evaluateJavaScript("window.smSetTheme(\(theme)\(contrast))", completionHandler: nil)
     }
 
     // MARK: - 클립보드 (네이티브 단일 경로, 스펙 §4)

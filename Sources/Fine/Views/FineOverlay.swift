@@ -15,14 +15,25 @@ extension View {
         alignment: Alignment = .center,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        overlay {
-            if isPresented.wrappedValue {
-                FineOverlayContainer(
-                    isPresented: isPresented,
-                    alignment: alignment,
-                    content: content
-                )
+        modifier(FineOverlayPresentation(isPresented: isPresented, alignment: alignment, overlayContent: content))
+    }
+}
+
+private struct FineOverlayPresentation<OverlayContent: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    let alignment: Alignment
+    let overlayContent: () -> OverlayContent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            ZStack {
+                if isPresented {
+                    FineOverlayContainer(isPresented: $isPresented, alignment: alignment, content: overlayContent)
+                        .transition(.opacity)
+                }
             }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isPresented)
         }
     }
 }
@@ -31,6 +42,8 @@ private struct FineOverlayContainer<Content: View>: View {
     @Binding var isPresented: Bool
     let alignment: Alignment
     let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
 
     var body: some View {
         ZStack(alignment: alignment) {
@@ -51,8 +64,11 @@ private struct FineOverlayContainer<Content: View>: View {
                         .stroke(FineTheme.glassEdge, lineWidth: 1)
                 )
                 .shadow(color: FineTheme.overlayShadow, radius: 22, y: 10)
+                .scaleEffect(appeared || reduceMotion ? 1 : 0.98)
+                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 1), value: appeared)
                 .padding(24)
         }
+        .onAppear { appeared = true }
         .background(EscapeKeyMonitor { isPresented = false })
         .transition(.opacity)
     }

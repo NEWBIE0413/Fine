@@ -70,7 +70,11 @@
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById('terminal'));
-  try { term.loadAddon(new WebglAddon.WebglAddon()); } catch (e) { /* webgl 불가 시 canvas 폴백 */ }
+  try {
+    const webgl = new WebglAddon.WebglAddon();
+    webgl.onContextLoss(function () { webgl.dispose(); term.refresh(0, term.rows - 1); });
+    term.loadAddon(webgl);
+  } catch (e) { /* Keep xterm's default renderer when WebGL is unavailable. */ }
 
   function post(type, payload) {
     window.webkit.messageHandlers.bridge.postMessage({ type: type, payload: payload === undefined ? null : payload });
@@ -216,6 +220,10 @@
   window.smSelectAll = function () { term.selectAll(); };
   window.smFocus = function () { term.focus(); };
   window.smFit = function () { try { fit.fit(); } catch (e) {} };
+  window.smRefresh = function () {
+    window.smFit();
+    term.refresh(0, term.rows - 1);
+  };
   // 하네스별 하단 크롭: Claude Code의 힌트 행만 Fine 상태줄로 대체하고,
   // 자체 입력/상태 행을 그리는 OpenCode는 한 줄도 가리지 않는다.
   window.smSetFooterCrop = function (px) {
@@ -228,7 +236,8 @@
   document.getElementById('fine-status').addEventListener('click', function () {
     post('statusClick');
   });
-  window.smSetTheme = function (theme) {
+  window.smSetTheme = function (theme, minimumContrastRatio) {
+    if (minimumContrastRatio !== undefined) { term.options.minimumContrastRatio = minimumContrastRatio; }
     term.options.theme = theme;
     document.documentElement.style.setProperty('--term-bg', theme.background);
     document.documentElement.style.setProperty('--term-fg', theme.foreground);

@@ -37,7 +37,8 @@ struct QuickHomeView: View {
                 models: modelCatalog.models,
                 selectedModelID: $selectedModelID,
                 isPresented: $isModelPickerPresented,
-                onRefresh: { modelCatalog.refresh(harness: harness) }
+                onRefresh: { modelCatalog.refresh(harness: harness) },
+                isLoading: modelCatalog.isLoading
             )
         }
         .onAppear {
@@ -141,16 +142,8 @@ struct QuickHomeView: View {
     }
 
     private var harnessPicker: some View {
-        Picker("하네스", selection: $harness) {
-            ForEach(QuickHarness.allCases) { candidate in
-                Text(candidate.title).tag(candidate)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.regular)
-        .fixedSize()
-        .help("대화를 실행할 하네스 — 터미널에서 ccv 또는 opencode를 치는 것과 같습니다")
+        HarnessSegmentedControl(selection: $harness)
+            .help("대화를 실행할 하네스 선택")
     }
 
     private var modelPicker: some View {
@@ -226,7 +219,7 @@ struct QuickHomeView: View {
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(proxyEnabled ? .primary : .secondary.opacity(0.72))
-                .frame(width: 30, height: 30)
+                .frame(width: FineTheme.compactControlHeight, height: FineTheme.compactControlHeight)
                 .background(
                     RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
                         .fill(Color.primary.opacity(proxyEnabled ? 0.10 : 0.045))
@@ -247,13 +240,15 @@ struct QuickHomeView: View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 10, weight: .semibold))
             Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                .frame(maxWidth: 210, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             Image(systemName: "chevron.down")
                 .font(.system(size: 7, weight: .bold))
                 .foregroundColor(.secondary.opacity(0.65))
         }
         .foregroundColor(.primary.opacity(0.75))
         .padding(.horizontal, 9)
-        .frame(height: 30)
+        .frame(height: FineTheme.compactControlHeight)
         .background(
             RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
                 .fill(FineTheme.controlFill)

@@ -14,4 +14,17 @@ final class TerminalThemeTests: XCTestCase {
         XCTAssertEqual(Set(ansi16.compactMap { colors[$0] }), ["#000000"])
         XCTAssertNotNil(TerminalPalette.quickLight.json)
     }
+    func testClaudePromptBackgroundHasContrastWithoutChangingCodexOrOpenCode() {
+        let claude = TerminalPalette.forHarness(.claude)
+        // Real Claude capture: ESC[100m background with ESC[97m prompt text.
+        XCTAssertEqual(claude.colors["brightBlack"], "#eeeeec")
+        XCTAssertEqual(claude.colors["brightWhite"], "#000000")
+        XCTAssertEqual(claude.minimumContrastRatio, 4.5)
+        let changedColors = claude.colors.keys.filter { claude.colors[$0] != TerminalPalette.quickLight.colors[$0] }
+        XCTAssertEqual(changedColors, ["brightBlack"])
+        XCTAssertEqual(TerminalPalette.forHarness(.codex), .quickLight)
+        XCTAssertEqual(TerminalPalette.forHarness(.opencode), .quickLight)
+        XCTAssertEqual(TerminalPalette.quickLight.minimumContrastRatio, 1)
+    }
+
 }

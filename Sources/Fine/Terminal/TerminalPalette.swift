@@ -3,6 +3,7 @@ import Foundation
 /// xterm.js에 전달하는 라이트 팔레트.
 struct TerminalPalette: Equatable {
     let colors: [String: String]
+    var minimumContrastRatio: Double = 1
 
     /// Fine 라이트 모드에서는 ANSI 장식색도 모두 검정으로 고정한다.
     /// Claude의 전체 화면 재도장 순서에 따라 글자색이 오가는 시각 회귀를 막는다.
@@ -29,6 +30,19 @@ struct TerminalPalette: Equatable {
         "brightCyan": "#000000",
         "brightWhite": "#000000",
     ])
+
+    /// Claude uses ANSI 100 (brightBlack) as the submitted prompt's background.
+    /// Keep its monochrome foreground, but give that surface a separate light tone.
+    /// Contrast correction also keeps ANSI 90 foreground text readable on white.
+    static let claudeLight: TerminalPalette = {
+        var colors = quickLight.colors
+        colors["brightBlack"] = "#eeeeec"
+        return TerminalPalette(colors: colors, minimumContrastRatio: 4.5)
+    }()
+
+    static func forHarness(_ harness: QuickHarness) -> TerminalPalette {
+        harness == .claude ? .claudeLight : .quickLight
+    }
 
     var json: String? {
         guard let data = try? JSONSerialization.data(

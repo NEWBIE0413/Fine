@@ -75,7 +75,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         if let terminalView { return terminalView }
         let view = TerminalWebView(
             frame: .zero,
-            palette: .quickLight,
+            palette: .forHarness(configuration.harness),
             statusText: configuration.terminalStatus,
             // OpenCode draws its own input and status rows at the bottom; only
             // Claude Code's hint row is replaced by Fine's status rail.

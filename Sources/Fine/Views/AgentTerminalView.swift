@@ -62,7 +62,8 @@ private struct SessionModelPickerView: View {
                 selectedModelID: $selectedModelID,
                 isPresented: .constant(true),
                 dismissOnSelect: false,
-                onRefresh: { modelCatalog.refresh(harness: session.configuration.harness) }
+                onRefresh: { modelCatalog.refresh(harness: session.configuration.harness) },
+                isLoading: modelCatalog.isLoading
             )
             .clipShape(RoundedRectangle(cornerRadius: FineTheme.compactControlRadius))
             .overlay(

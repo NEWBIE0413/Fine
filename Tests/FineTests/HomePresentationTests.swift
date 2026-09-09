@@ -55,12 +55,7 @@ final class HomePresentationTests: XCTestCase {
             VStack(spacing: 14) {
                 QuickHomeComposer(prompt: .constant(prompt), onSubmit: {}) {
                     QuickHomeControls {
-                        Picker("하네스", selection: .constant(1)) {
-                            Text("Claude").tag(0)
-                            Text("Codex").tag(1)
-                            Text("OpenCode").tag(2)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        HarnessSegmentedControl(selection: .constant(.codex))
                         .recordFrame("harness")
                     } options: {
                         HStack(spacing: 6) {

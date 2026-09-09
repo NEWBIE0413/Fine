@@ -145,6 +145,8 @@ provider, default option, keyboard focus.
 ### `WhiteTerminal`
 
 Edge-to-edge white xterm surface. ANSI foreground colors resolve to black.
+Claude alone uses a light gray ANSI 100 prompt background and 4.5:1 minimum
+text contrast; Codex and OpenCode retain the original unmodified palette.
 The glyph grid uses the terminal content inset so prompts do not touch the
 window edge. Fine clips Claude Code's final built-in hint row and replaces it
 with a compact status rail showing the session's actual provider/model and
@@ -259,3 +261,11 @@ follow the interface ink; no brand colors or raster images are used.
   output buffers are released after delivery, and unchanged layouts skip refit.
 - Keep xterm's existing bounded scrollback and render only the selected terminal.
   The CLI owns transcript loading; Fine does not load a second message history.
+
+## Model selection polish
+
+Harness and model controls share a 30 pt height. A moving selection surface
+connects harness changes; picker presentation uses a restrained fade and scale.
+Single-provider catalogs omit the provider rail, large catalogs offer search,
+and model labels wrap to two lines. The composer uses a borderless glass surface.
+Reduce Motion removes decorative movement.
