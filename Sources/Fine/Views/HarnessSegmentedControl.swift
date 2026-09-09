@@ -30,7 +30,7 @@ struct HarnessSegmentedControl: View {
         .padding(2)
         .background(FineTheme.controlFill, in: RoundedRectangle(cornerRadius: FineTheme.compactControlRadius))
         .fixedSize()
-        .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 1), value: selection)
+        .animation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 1), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("하네스")
     }
