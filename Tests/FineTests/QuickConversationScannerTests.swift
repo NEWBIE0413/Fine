@@ -1,4 +1,5 @@
 import XCTest
+import SQLite3
 @testable import Fine
 
 final class QuickConversationScannerTests: XCTestCase {
@@ -69,6 +70,84 @@ final class QuickConversationScannerTests: XCTestCase {
             QuickConversationScanner.scan(directory: directory).first
         )
         XCTAssertEqual(conversation.title, "공부 대화")
+    }
+
+    func testRecentListMergesHarnessesByTimeAndKeepsEqualTitlesDistinct() throws {
+        let store = try makeNativeStore()
+        let codexID = UUID().uuidString.lowercased()
+        try sql(store.codexDatabase, "INSERT INTO threads VALUES ('\(codexID)', '/tmp/fine', 'Same title', 'Codex summary', 200, 0, 'cli')")
+        try sql(store.openCodeDatabase, "INSERT INTO session VALUES ('ses_MixedCase', '/tmp/fine', 'Same title', 300000, NULL, NULL)")
+        let claude = try writeTranscript([#"{"type":"ai-title","aiTitle":"Same title"}"#], modifiedAt: Date(timeIntervalSince1970: 100))
+        let result = QuickConversationScanner.scan(directory: directory, sessionStore: store, workingDirectory: "/tmp/fine")
+        XCTAssertEqual(result.map(\.harness), [.opencode, .codex, .claude])
+        XCTAssertEqual(result.map(\.title), ["Same title", "Codex summary", "Same title"])
+        XCTAssertEqual(result.map(\.id), ["ses_MixedCase", codexID, claude.deletingPathExtension().lastPathComponent])
+        XCTAssertEqual(result[0].modifiedAt.timeIntervalSince1970, 300)
+        XCTAssertEqual(Set(result.map(\.listID)).count, 3)
+    }
+
+    func testRecentListExcludesOtherProjectsArchivedSubagentsAndMalformedIDs() throws {
+        let store = try makeNativeStore()
+        for (cwd, archived, source) in [("/tmp/other", 0, "cli"), ("/tmp/fine", 1, "cli"), ("/tmp/fine", 0, "subagent")] {
+            try sql(store.codexDatabase, "INSERT INTO threads VALUES ('\(UUID().uuidString)', '\(cwd)', 'Title', '', 200, \(archived), '\(source)')")
+        }
+        try sql(store.codexDatabase, "INSERT INTO threads VALUES ('not-a-session', '/tmp/fine', 'Invalid', '', 200, 0, 'cli')")
+        try sql(store.openCodeDatabase, """
+            INSERT INTO session VALUES ('ses_other', '/tmp/other', 'Other', 200000, NULL, NULL);
+            INSERT INTO session VALUES ('ses_child', '/tmp/fine', 'Child', 200000, 'ses_parent', NULL);
+            INSERT INTO session VALUES ('ses_archived', '/tmp/fine', 'Archived', 200000, NULL, 300000);
+            INSERT INTO session VALUES ('ses_empty', '/tmp/fine', 'New session - today', 200000, NULL, NULL);
+            """)
+        XCTAssertTrue(store.recentConversations(workingDirectory: "/tmp/fine").isEmpty)
+    }
+
+    func testMissingClaudeDirectoryDoesNotHideNativeConversationsAndOlderCodexSchemaWorks() throws {
+        let store = try makeNativeStore()
+        let codexID = UUID().uuidString
+        try sql(store.codexDatabase, "ALTER TABLE threads DROP COLUMN name; INSERT INTO threads VALUES ('\(codexID)', '/tmp/fine', 'Older Codex', 10, 0, 'cli')")
+        let result = QuickConversationScanner.scan(directory: directory.appendingPathComponent("missing"), sessionStore: store, workingDirectory: "/tmp/fine")
+        XCTAssertEqual(result.map(\.title), ["Older Codex"])
+        XCTAssertEqual(result.first?.harness, .codex)
+    }
+
+    func testLocalRecentSourcesWhenExplicitlyRequested() throws {
+        guard ProcessInfo.processInfo.environment["FINE_RECENTS_LIVE"] == "1" else {
+            throw XCTSkip("Set FINE_RECENTS_LIVE=1 for a read-only local integration check")
+        }
+        let rows = QuickConversationScanner.scan(
+            directory: QuickConversationScanner.defaultTranscriptsDirectory(), sessionStore: .local
+        )
+        for harness in QuickHarness.allCases {
+            let count = rows.filter { $0.harness == harness }.count
+            print("Local recent source \(harness.rawValue): \(count) conversations")
+            XCTAssertGreaterThan(count, 0, "Expected installed \(harness.title) conversations")
+        }
+    }
+
+    func testNativePageFillsPastPlaceholderTitlesAndRespectsPerHarnessLimit() throws {
+        let store = try makeNativeStore()
+        for i in 0..<8 {
+            let title = i > 3 ? "New session - today" : "Saved \(i)"
+            try sql(store.openCodeDatabase, "INSERT INTO session VALUES ('ses_\(i)', '/tmp/fine', '\(title)', \(i * 1000), NULL, NULL)")
+            try sql(store.codexDatabase, "INSERT INTO threads VALUES ('\(UUID().uuidString)', '/tmp/fine', '\(i > 3 ? "" : title)', '', \(i), 0, 'cli')")
+        }
+        let rows = store.recentConversations(workingDirectory: "/tmp/fine", limit: 2)
+        XCTAssertEqual(rows.filter { $0.harness == .codex }.map(\.title), ["Saved 3", "Saved 2"])
+        XCTAssertEqual(rows.filter { $0.harness == .opencode }.map(\.title), ["Saved 3", "Saved 2"])
+    }
+
+    private func makeNativeStore() throws -> HarnessSessionStore {
+        let store = HarnessSessionStore(codexDatabase: directory.appendingPathComponent("codex.sqlite"), openCodeDatabase: directory.appendingPathComponent("opencode.db"))
+        try sql(store.codexDatabase, "CREATE TABLE threads (id TEXT, cwd TEXT, title TEXT, name TEXT, updated_at INTEGER, archived INTEGER, source TEXT)")
+        try sql(store.openCodeDatabase, "CREATE TABLE session (id TEXT, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER)")
+        return store
+    }
+
+    private func sql(_ url: URL, _ query: String) throws {
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        XCTAssertEqual(sqlite3_exec(db, query, nil, nil, nil), SQLITE_OK, String(cString: sqlite3_errmsg(db)))
     }
 
     private func writeTranscript(_ lines: [String], modifiedAt: Date) throws -> URL {

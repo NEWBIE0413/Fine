@@ -2,6 +2,30 @@ import XCTest
 @testable import Fine
 
 final class TerminalRenderingTests: XCTestCase {
+    @MainActor
+    func testStatusClickBridgeOpensModelPicker() {
+        let terminal = TerminalWebView(
+            frame: .zero,
+            palette: .quickLight,
+            statusText: "Kimi · k3 / effort high"
+        )
+        var clickCount = 0
+        terminal.onStatusClick = { clickCount += 1 }
+
+        terminal.handleBridgeMessage(["type": "statusClick"])
+
+        XCTAssertEqual(clickCount, 1)
+    }
+
+    func testHiddenTerminalBatchesWithoutChangingForegroundEchoLatency() {
+        let echo = Data("한글 입력".utf8)
+        XCTAssertEqual(TerminalOutputBatchPolicy.flushDelay(for: echo, elapsed: 1, visible: true), 0)
+        XCTAssertEqual(TerminalOutputBatchPolicy.flushDelay(for: echo, elapsed: 1, visible: false), 0.1)
+        let redraw = Data("\u{1B}[?25l\u{1B}[2Jpaint".utf8)
+        XCTAssertEqual(TerminalOutputBatchPolicy.flushDelay(for: redraw, elapsed: 1, visible: true), 0.008)
+        XCTAssertEqual(TerminalOutputBatchPolicy.flushDelay(for: redraw, elapsed: 1, visible: false), 0.1)
+    }
+
     func testSmallIdleEchoFlushesImmediately() {
         XCTAssertTrue(TerminalOutputBatchPolicy.shouldFlushImmediately(
             Data("a".utf8),

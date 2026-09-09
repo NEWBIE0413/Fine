@@ -19,6 +19,10 @@ enum FineTheme {
     static let selectedFill = Color.white.opacity(0.62)
     static let selectedRim = Color.white.opacity(0.72)
     static let controlFill = Color.black.opacity(0.05)
+    static let pickerRailFill = Color.black.opacity(0.018)
+    static let overlayScrim = Color.black.opacity(0.06)
+    static let overlayShadow = Color.black.opacity(0.14)
+    static let overlayCornerRadius: CGFloat = 12
     static let glassSheenTop = Color.white.opacity(0.30)
     static let glassSheenMiddle = Color.white.opacity(0.10)
     static let glassTintBottom = Color(nsColor: .windowBackgroundColor).opacity(0.08)

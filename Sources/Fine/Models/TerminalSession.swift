@@ -1,12 +1,13 @@
 import Combine
 import Foundation
 
-/// One ephemeral Claude conversation backed by a direct PTY and xterm.js view.
+/// One ephemeral agent conversation backed by a direct PTY and xterm.js view.
 final class TerminalSession: Identifiable, ObservableObject, Equatable {
     let id: UUID
     @Published var name: String
     @Published var isRunning = false
     @Published var startError: String?
+    @Published var isModelPickerPresented = false
 
     let launch: QuickLaunch
     let configuration: QuickSessionConfiguration
@@ -18,6 +19,13 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     private var identityTimer: Timer?
     private var titleCancellable: AnyCancellable?
     private let configurationStorage: QuickSessionConfigurationStorage
+    private var persistenceHandler: (() -> Void)?
+    private var identityStartedAt = Date()
+    private var metadataGeneration = UUID()
+    private var metadataRefreshInFlight = false
+    private let metadataQueue = DispatchQueue(label: "Fine.SessionMetadata", qos: .utility)
+
+    var resumableSessionID: String? { sessionId }
 
     init(
         id: UUID = UUID(),
@@ -37,12 +45,41 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         }
     }
 
+    convenience init(
+        snapshot: QuickSessionSnapshot,
+        configurationStorage: QuickSessionConfigurationStorage = .shared
+    ) {
+        self.init(
+            id: snapshot.id,
+            name: snapshot.name,
+            launch: snapshot.conversationID.map { .resume(sessionId: $0) } ?? .resumeLatest,
+            configuration: snapshot.configuration,
+            configurationStorage: configurationStorage
+        )
+    }
+
+    func snapshot() -> QuickSessionSnapshot {
+        QuickSessionSnapshot(
+            id: id,
+            name: name,
+            conversationID: sessionId,
+            configuration: configuration
+        )
+    }
+
+    func setPersistenceHandler(_ handler: @escaping () -> Void) {
+        persistenceHandler = handler
+    }
+
     func getOrCreateTerminal() -> TerminalWebView {
         if let terminalView { return terminalView }
         let view = TerminalWebView(
             frame: .zero,
             palette: .quickLight,
-            statusText: configuration.terminalStatus
+            statusText: configuration.terminalStatus,
+            // OpenCode draws its own input and status rows at the bottom; only
+            // Claude Code's hint row is replaced by Fine's status rail.
+            footerCrop: configuration.harness == .claude ? TerminalWebView.claudeFooterCrop : 0
         )
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onUserInput = { [weak self] data in self?.pty?.write(data) }
@@ -51,6 +88,11 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         }
         view.onReady = { [weak self] in self?.startIfNeeded() }
         view.onWebProcessCrash = { [weak self] in self?.recoverFromCrash() }
+        view.onStatusClick = { [weak self] in
+            DispatchQueue.main.async {
+                self?.isModelPickerPresented = true
+            }
+        }
         terminalView = view
         return view
     }
@@ -69,15 +111,22 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     }
 
     private func startPTY() {
+        identityStartedAt = Date()
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let executableName = "-" + (shell as NSString).lastPathComponent
         let directory = QuickSessionPolicy.ensureWorkingDirectory()
+        // Pin a restored "latest" launch before starting the CLI so title lookup
+        // and the actual resume command use exactly the same conversation.
+        let effectiveLaunch = HarnessSessionStore.local.resolvingLatest(
+            launch, harness: configuration.harness, workingDirectory: directory
+        )
+        if case .resume(let id) = effectiveLaunch { sessionId = id }
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
         environment = QuickSessionPolicy.applyingEnvironment(
             environment,
-            launch: launch,
+            launch: effectiveLaunch,
             configuration: configuration
         )
 
@@ -91,7 +140,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
             try process.start(
                 executable: shell,
                 execName: executableName,
-                arguments: Self.launchArguments(launch: launch, configuration: configuration),
+                arguments: Self.launchArguments(launch: effectiveLaunch, configuration: configuration),
                 environment: environment,
                 workingDirectory: directory,
                 cols: view?.lastCols ?? 80,
@@ -101,7 +150,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
             isRunning = true
             startError = nil
             if let processIdentifier = process.processIdentifier {
-                beginTitleUpdates(processIdentifier: processIdentifier)
+                beginIdentityUpdates(processIdentifier: processIdentifier)
             }
         } catch {
             startError = "터미널 시작 실패: \(error)"
@@ -109,50 +158,109 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         }
     }
 
-    private func beginTitleUpdates(processIdentifier: pid_t) {
-        let scanner = QuickConversationScanner.shared
-        if case .resume = launch {} else {
+    private func beginIdentityUpdates(processIdentifier: pid_t) {
+        identityTimer?.invalidate()
+        titleCancellable = nil
+        metadataGeneration = UUID()
+        metadataRefreshInFlight = false
+        if case .resume = launch {} else if case .resumeLatest = launch, sessionId != nil {} else {
             sessionId = nil
             name = initialName
         }
-        titleCancellable = scanner.$aiTitlesBySessionId
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] titles in self?.updateTitle(titlesBySessionId: titles) }
-        scanner.start()
-        scanner.rescan()
 
-        guard sessionId == nil else { return }
-        resolveSessionId(processIdentifier: processIdentifier)
-        guard sessionId == nil else { return }
-        identityTimer?.invalidate()
-        identityTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) {
+        if configuration.harness == .claude {
+            let scanner = QuickConversationScanner.shared
+            titleCancellable = scanner.$aiTitlesBySessionId
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] titles in self?.updateTitle(titlesBySessionId: titles) }
+            scanner.start()
+            if let sessionId { scanner.track(sessionID: sessionId, owner: id) }
+        }
+
+        refreshSessionMetadata(processIdentifier: processIdentifier)
+        identityTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) {
             [weak self] timer in
             guard let self, self.isRunning else {
                 timer.invalidate()
                 return
             }
-            self.resolveSessionId(processIdentifier: processIdentifier)
-            if self.sessionId != nil {
+            if self.configuration.harness == .claude && self.sessionId != nil {
                 timer.invalidate()
                 self.identityTimer = nil
+                return
+            }
+            if self.sessionId == nil || AppResourcePolicy.hasVisibleWindows {
+                self.refreshSessionMetadata(processIdentifier: processIdentifier)
+            }
+        }
+        identityTimer?.tolerance = 0.5
+    }
+
+    func refreshSessionMetadata(processIdentifier: pid_t, store: HarnessSessionStore? = nil) {
+        guard !metadataRefreshInFlight else { return }
+        metadataRefreshInFlight = true
+        let generation = metadataGeneration
+        let knownID = sessionId
+        let harness = configuration.harness
+        let startedAt = identityStartedAt
+        let initialPrompt: String?
+        if case .initialPrompt(let prompt) = launch { initialPrompt = prompt } else { initialPrompt = nil }
+        metadataQueue.async { [weak self] in
+            let store = store ?? HarnessSessionStore.local
+            let resolvedID: String?
+            if let knownID {
+                resolvedID = knownID
+            } else {
+                switch harness {
+                case .claude:
+                    resolvedID = QuickSessionTitleResolver.sessionId(processIdentifier: processIdentifier)
+                case .codex:
+                    resolvedID = CodexSessionResolver.sessionId(processIdentifier: processIdentifier)
+                        ?? store.newSessionID(
+                            harness: harness, createdAfter: startedAt,
+                            workingDirectory: QuickSessionPolicy.workingDirectory,
+                            initialPrompt: initialPrompt
+                        )
+                case .opencode:
+                    resolvedID = store.newSessionID(
+                        harness: harness, createdAfter: startedAt,
+                        workingDirectory: QuickSessionPolicy.workingDirectory, initialPrompt: initialPrompt
+                    )
+                }
+            }
+            let metadata = resolvedID.map { id in
+                store.metadata(harness: harness, sessionID: id)
+                    ?? HarnessSessionMetadata(id: id, title: nil)
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.metadataGeneration == generation else { return }
+                self.metadataRefreshInFlight = false
+                if let metadata { self.applyMetadata(metadata) }
             }
         }
     }
 
-    private func resolveSessionId(processIdentifier: pid_t) {
-        guard sessionId == nil,
-              let resolved = QuickSessionTitleResolver.sessionId(
-                  processIdentifier: processIdentifier
-              ) else { return }
-        sessionId = resolved
-        configurationStorage.saveIfAbsent(configuration, for: resolved)
-        updateTitle(titlesBySessionId: QuickConversationScanner.shared.aiTitlesBySessionId)
-        QuickConversationScanner.shared.rescan()
+    func applyMetadata(_ metadata: HarnessSessionMetadata) {
+        guard sessionId == nil || sessionId == metadata.id else { return }
+        let identityChanged = sessionId == nil
+        sessionId = metadata.id
+        if identityChanged {
+            configurationStorage.saveIfAbsent(configuration, for: metadata.id)
+            persistenceHandler?()
+        }
+        if configuration.harness == .claude {
+            updateTitle(titlesBySessionId: QuickConversationScanner.shared.aiTitlesBySessionId)
+            if identityChanged { QuickConversationScanner.shared.track(sessionID: metadata.id, owner: id) }
+        } else if let title = metadata.title {
+            updateTitle(titlesBySessionId: [metadata.id: title])
+        }
     }
 
     func updateTitle(titlesBySessionId: [String: String]) {
-        guard let sessionId, let title = titlesBySessionId[sessionId] else { return }
+        guard let sessionId, let title = titlesBySessionId[sessionId],
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title != name else { return }
         name = title
+        persistenceHandler?()
     }
 
     func matchesConversation(sessionId: String) -> Bool {
@@ -179,6 +287,8 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     }
 
     func cleanup(force: Bool = false) {
+        QuickConversationScanner.shared.untrack(owner: id)
+        metadataGeneration = UUID()
         identityTimer?.invalidate()
         identityTimer = nil
         titleCancellable = nil
@@ -190,6 +300,8 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
 
     /// 앱 종료 경로 — 비동기 승격이 실행될 기회가 없으므로 동기적으로 종료한다.
     func cleanupForTermination() {
+        QuickConversationScanner.shared.untrack(owner: id)
+        metadataGeneration = UUID()
         identityTimer?.invalidate()
         identityTimer = nil
         titleCancellable = nil
@@ -203,7 +315,8 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         launch: QuickLaunch = .blank,
         configuration: QuickSessionConfiguration = .default
     ) -> [String] {
-        ["-lc", QuickSessionPolicy.launchCommand(for: launch, configuration: configuration)]
+        QuickSessionPolicy.shellArguments
+            + [QuickSessionPolicy.launchCommand(for: launch, configuration: configuration)]
     }
 
     static func == (lhs: TerminalSession, rhs: TerminalSession) -> Bool {

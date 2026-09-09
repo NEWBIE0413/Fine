@@ -30,3 +30,13 @@ These components are distributed under the MIT License:
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
+
+## Harness logos
+
+The monochrome Claude, Codex, and OpenCode SVG marks are from Lobe Icons:
+https://github.com/lobehub/lobe-icons/tree/master/packages/static-svg/icons
+
+Copyright (c) 2023 LobeHub. Distributed under the MIT License reproduced above.
+The SVGs are bundled as macOS template vector assets with black fills.
+Paths are normalized to cubic curves for CoreSVG compatibility.
+Brand marks remain the trademarks of their respective owners.

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Fine의 열린 세션과 Claude transcript 최근 항목을 표시하는 최소 사이드바.
+/// Fine의 열린 세션과 세 하네스의 최근 대화를 표시하는 사이드바.
 struct QuickSidebarView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var recentScanner = QuickConversationScanner.shared
     @State private var isHoveringNew = false
@@ -41,23 +42,46 @@ struct QuickSidebarView: View {
                 }
 
                 ScrollView {
-                    LazyVStack(spacing: 3) {
+                    LazyVStack(spacing: 0) {
                         ForEach(appState.sessions) { session in
                             QuickSessionRow(
                                 session: session,
                                 isSelected: appState.selectedSession?.id == session.id,
-                                onSelect: {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) {
-                                        appState.selectSession(session)
-                                    }
-                                },
-                                onClose: { appState.removeSession(session) }
+                                onSelect: { appState.selectSession(session) },
+                                onClose: { appState.removeSession(session) },
+                                drag: OpenSessionDrag(windowID: appState.windowStateID, sessionID: session.id),
+                                onDropSession: { item, edge in
+                                    guard item.windowID == appState.windowStateID else { return false }
+                                    return appState.moveSession(id: item.sessionID, relativeTo: session.id, edge: edge)
+                                }
                             )
+                            .accessibilityAction(named: Text("위로 이동")) {
+                                appState.moveSession(id: session.id, by: -1)
+                            }
+                            .accessibilityAction(named: Text("아래로 이동")) {
+                                appState.moveSession(id: session.id, by: 1)
+                            }
                         }
+                    }
+                    .background(alignment: .top) {
+                        // One persistent selection block travels between rows; only this
+                        // layer animates, so terminal selection and row hitboxes stay immediate.
+                        let selectedIndex = appState.sessions.firstIndex { $0.id == appState.selectedSession?.id }
+                        RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                            .fill(FineTheme.selectedFill)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                                    .stroke(FineTheme.selectedRim, lineWidth: 1)
+                            }
+                            .frame(height: 37)
+                            .offset(y: CGFloat(selectedIndex ?? 0) * 37)
+                            .opacity(selectedIndex == nil ? 0 : 1)
+                            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1), value: selectedIndex)
+                            .allowsHitTesting(false)
                     }
                     .padding(.horizontal, FineTheme.sidebarInset)
                 }
-                .frame(maxHeight: 208)
+                .frame(height: min(208, CGFloat(appState.sessions.count) * 37))
             }
 
             QuickSectionHeader(title: "최근 항목") {
@@ -74,7 +98,7 @@ struct QuickSidebarView: View {
 
             Group {
                 if recentScanner.conversations.isEmpty {
-                    Text("최근 대화가 없습니다")
+                    Text(recentScanner.isLoading ? "최근 대화를 불러오는 중…" : "최근 대화가 없습니다")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, FineTheme.sidebarInset)
@@ -83,13 +107,22 @@ struct QuickSidebarView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 3) {
-                            ForEach(recentScanner.conversations) { conversation in
+                            ForEach(recentScanner.conversations, id: \.listID) { conversation in
                                 QuickRecentConversationRow(
                                     conversation: conversation,
                                     onResume: {
                                         appState.resumeConversation(conversation)
                                     }
                                 )
+                            }
+                            if recentScanner.hasMore {
+                                Button(recentScanner.isLoading ? "불러오는 중…" : "더 보기") { recentScanner.loadNextPage() }
+                                    .font(.system(size: 11))
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.secondary)
+                                    .disabled(recentScanner.isLoading)
+                                    .padding(.vertical, 12)
+                                    .onAppear { recentScanner.loadNextPage() }
                             }
                         }
                         .padding(.horizontal, FineTheme.sidebarInset)
@@ -102,106 +135,112 @@ struct QuickSidebarView: View {
         .background { GlassSidebarBackground() }
         .onAppear {
             recentScanner.start()
-            recentScanner.rescan()
         }
     }
 }
 
 private struct QuickSessionRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var session: TerminalSession
     let isSelected: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
+    let drag: OpenSessionDrag
+    let onDropSession: (OpenSessionDrag, SessionInsertionEdge) -> Bool
+    @State private var insertionEdge: SessionInsertionEdge?
     @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "bubble.left")
-                .font(.system(size: FineTheme.iconSize, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: FineTheme.iconFrame)
-
             Text(session.name)
-                .font(.system(size: 13, weight: isSelected ? .bold : .medium))
+                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                .lineLimit(1)
                 .foregroundStyle(.primary)
-
             Spacer(minLength: 0)
-
             Circle()
-                .fill(session.isRunning ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.35))
+                .fill(session.isRunning ? Color.green.opacity(0.72) : Color.secondary.opacity(0.3))
                 .frame(width: 5, height: 5)
-
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("대화 종료")
-            .opacity(isHovering || isSelected ? 1 : 0)
         }
-        .padding(.vertical, FineTheme.rowVerticalPadding)
-        .padding(.horizontal, FineTheme.rowHorizontalPadding)
+        .padding(.leading, FineTheme.rowHorizontalPadding)
+        .padding(.trailing, 36)
+        .frame(maxWidth: .infinity)
+        .frame(height: 37)
+        .accessibilityHidden(true)
         .background {
-            if isSelected {
-                RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
-                    .fill(FineTheme.selectedFill)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
-                            .stroke(FineTheme.selectedRim, lineWidth: 1)
-                    }
-            } else if isHovering {
-                RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
-                    .fill(FineTheme.hoverFill)
+            RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                .fill(FineTheme.hoverFill)
+                .opacity(isHovering && !isSelected ? 1 : 0)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+                .allowsHitTesting(false)
+        }
+        .overlay(alignment: insertionEdge == .before ? .top : .bottom) {
+            if insertionEdge != nil {
+                Capsule()
+                    .fill(Color.primary.opacity(0.48))
+                    .frame(height: 2)
+                    .padding(.horizontal, 4)
+                    .allowsHitTesting(false)
             }
         }
-        .contentShape(Rectangle())
+        .overlay {
+            SessionRowInteraction(item: drag, title: "\(session.name), \(session.configuration.harness.title)",
+                                  onSelect: onSelect, onDrop: onDropSession,
+                                  onTarget: { insertionEdge = $0 })
+        }
+        .overlay(alignment: .trailing) {
+            if isHovering || isSelected {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("대화 종료")
+                .padding(.trailing, 4)
+            }
+        }
         .onHover { isHovering = $0 }
-        .onTapGesture(perform: onSelect)
-        .animation(.easeOut(duration: 0.14), value: isHovering)
     }
 }
 
-private struct QuickRecentConversationRow: View {
+struct QuickRecentConversationRow: View {
     let conversation: QuickConversation
     let onResume: () -> Void
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bubble.left")
-                .font(.system(size: FineTheme.iconSize, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: FineTheme.iconFrame)
+        Button(action: onResume) {
+            HStack(spacing: 8) {
+                Text(conversation.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
-            Text(conversation.title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+                Spacer(minLength: 4)
 
-            Spacer(minLength: 4)
+                Text(relativeTime(conversation.modifiedAt))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .fixedSize()
 
-            Text(relativeTime(conversation.modifiedAt))
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .padding(.vertical, FineTheme.rowVerticalPadding)
-        .padding(.horizontal, FineTheme.rowHorizontalPadding)
-        .background(
-            RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
-                .fill(isHovering ? FineTheme.hoverFill : Color.clear)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
-        .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) {
-                onResume()
+                HarnessLogo(harness: conversation.harness)
+                    .accessibilityHidden(true)
             }
+            .padding(.vertical, FineTheme.rowVerticalPadding)
+            .padding(.horizontal, FineTheme.rowHorizontalPadding)
+            .background(
+                RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
+                    .fill(isHovering ? FineTheme.hoverFill : Color.clear)
+            )
+            .contentShape(Rectangle())
         }
-        .help("이 대화 재개")
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(conversation.title), \(conversation.harness.title)")
+        .onHover { isHovering = $0 }
+        .help("\(conversation.harness.title)에서 재개 · \(conversation.title)")
         .animation(.easeOut(duration: 0.14), value: isHovering)
     }
 

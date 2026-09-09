@@ -4,99 +4,63 @@ struct QuickHomeView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var modelCatalog = QuickModelCatalog()
     @State private var prompt = ""
+    @State private var harness: QuickHarness
     @State private var selectedModelID: String
     @State private var selectedEffort: QuickEffort
     @State private var proxyEnabled: Bool
-    @FocusState private var isPromptFocused: Bool
+    @State private var isModelPickerPresented = false
 
     init() {
         let saved = QuickComposerPreferences.load()
+        _harness = State(initialValue: saved.harness)
         _selectedModelID = State(initialValue: saved.modelID)
         _selectedEffort = State(initialValue: saved.effort)
         _proxyEnabled = State(initialValue: saved.proxyEnabled)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("무엇을 도와드릴까요?")
-                    .font(.system(size: 24, weight: .semibold))
-                    .tracking(-0.45)
-                    .foregroundStyle(.primary)
-                Text("모델과 effort를 선택하고 바로 대화를 시작하세요.")
-                    .font(.system(size: 13))
+        QuickHomePresentation {
+            VStack(spacing: 14) {
+                QuickHomeComposer(prompt: $prompt, onSubmit: submit) {
+                    composerControls
+                }
+                Text(sessionModeDescription)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
             }
-
-            VStack(spacing: 0) {
-                ZStack(alignment: .topLeading) {
-                    if prompt.isEmpty {
-                        Text("메시지를 입력하세요")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.secondary.opacity(0.62))
-                            .allowsHitTesting(false)
-                    }
-                    TextField("", text: $prompt, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 16))
-                        .lineLimit(3...10)
-                        .focused($isPromptFocused)
-                        .onSubmit(submit)
-                }
-                .frame(minHeight: 72, alignment: .topLeading)
-                .padding(16)
-
-                Divider()
-
-                HStack(spacing: 8) {
-                    modelPicker
-                    effortPicker
-                    proxyButton
-                    Text(sessionModeDescription)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Button(action: submit) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(trimmedPrompt.isEmpty ? Color.secondary.opacity(0.55) : .white)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(
-                                    cornerRadius: FineTheme.compactControlRadius,
-                                    style: .continuous
-                                )
-                                .fill(trimmedPrompt.isEmpty ? FineTheme.controlFill : Color.primary)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(trimmedPrompt.isEmpty)
-                }
-                .padding(10)
-            }
-            .background(
-                RoundedRectangle(cornerRadius: FineTheme.composerCornerRadius, style: .continuous)
-                    .fill(FineTheme.workspace)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: FineTheme.composerCornerRadius, style: .continuous)
-                    .stroke(FineTheme.divider, lineWidth: 1)
+        }
+        .fineOverlay(isPresented: $isModelPickerPresented) {
+            QuickModelPickerView(
+                models: modelCatalog.models,
+                selectedModelID: $selectedModelID,
+                isPresented: $isModelPickerPresented,
+                onRefresh: { modelCatalog.refresh(harness: harness) }
             )
         }
-        .frame(maxWidth: FineTheme.homeContentWidth)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, 56)
-        .padding(.vertical, 48)
         .onAppear {
-            isPromptFocused = true
-            modelCatalog.refresh()
+            modelCatalog.refresh(harness: harness)
         }
-        .onChange(of: selectedModelID) { _, modelID in
-            if modelID.hasPrefix("claude-codex-")
-                || modelID.hasPrefix("claude-kimi-")
-                || modelID.hasPrefix("claude-gemini-") {
+        .task(id: harness) {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(180))
+                guard !Task.isCancelled else { return }
+                if AppResourcePolicy.hasVisibleWindows { modelCatalog.refresh(harness: harness) }
+            }
+        }
+        .onChange(of: harness) { _, newHarness in
+            selectedModelID = QuickModelOption.defaultID
+            proxyEnabled = false
+            modelCatalog.refresh(harness: newHarness)
+            persistSelection()
+        }
+        .onChange(of: selectedModelID) { _, _ in
+            if selectedModel.requiresProxy {
                 proxyEnabled = true
+            } else if selectedModel.isDefault {
+                proxyEnabled = false
             }
             constrainSelectedEffort()
             persistSelection()
@@ -104,6 +68,7 @@ struct QuickHomeView: View {
         .onChange(of: selectedEffort) { persistSelection() }
         .onChange(of: proxyEnabled) { persistSelection() }
         .onChange(of: modelCatalog.models) { _, models in
+            guard modelCatalog.harness == harness else { return }
             let resolved = QuickComposerPreferences.resolved(
                 currentConfiguration,
                 availableModels: models
@@ -113,6 +78,47 @@ struct QuickHomeView: View {
             proxyEnabled = resolved.proxyEnabled
             QuickComposerPreferences.save(resolved)
         }
+    }
+
+    private var composerControls: some View {
+        QuickHomeControls {
+            harnessPicker
+        } options: {
+            modelOptions
+        } send: {
+            sendButton
+        }
+    }
+
+    private var modelOptions: some View {
+        HStack(spacing: 6) {
+            modelPicker
+            if !selectedModel.supportedEfforts.isEmpty {
+                effortPicker
+            }
+            if harness == .claude {
+                proxyButton
+            }
+        }
+    }
+
+    private var sendButton: some View {
+        Button(action: submit) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(trimmedPrompt.isEmpty ? Color.secondary : .white)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(trimmedPrompt.isEmpty
+                            ? Color.black.opacity(0.05)
+                            : Color(red: 0.22, green: 0.27, blue: 0.23))
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(trimmedPrompt.isEmpty)
+        .accessibilityLabel("대화 시작")
+        .help("대화 시작")
     }
 
     private var trimmedPrompt: String {
@@ -131,40 +137,43 @@ struct QuickHomeView: View {
 
     private var selectedModel: QuickModelOption {
         modelCatalog.models.first(where: { $0.id == selectedModelID })
-            ?? QuickModelCatalog.fallbackModels[1]
+            ?? .defaultOption(for: harness)
+    }
+
+    private var harnessPicker: some View {
+        Picker("하네스", selection: $harness) {
+            ForEach(QuickHarness.allCases) { candidate in
+                Text(candidate.title).tag(candidate)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.regular)
+        .fixedSize()
+        .help("대화를 실행할 하네스 — 터미널에서 ccv 또는 opencode를 치는 것과 같습니다")
     }
 
     private var modelPicker: some View {
-        Menu {
-            Section("Claude") {
-                ForEach(modelCatalog.models.filter { !$0.isCodex && !$0.isKimi && !$0.isGemini }) { model in
-                    modelButton(model)
-                }
-            }
-            let codexModels = modelCatalog.models.filter(\.isCodex)
-            if !codexModels.isEmpty {
-                Section("Codex · 프록시") {
-                    ForEach(codexModels) { model in modelButton(model) }
-                }
-            }
-            let kimiModels = modelCatalog.models.filter(\.isKimi)
-            if !kimiModels.isEmpty {
-                Section("Kimi · 프록시") {
-                    ForEach(kimiModels) { model in modelButton(model) }
-                }
-            }
-            let geminiModels = modelCatalog.models.filter(\.isGemini)
-            if !geminiModels.isEmpty {
-                Section("Gemini · 프록시") {
-                    ForEach(geminiModels) { model in modelButton(model) }
-                }
-            }
+        Button {
+            isModelPickerPresented.toggle()
         } label: {
-            pickerLabel(selectedModel.displayName, icon: "sparkle")
+            pickerLabel(selectedModel.conciseDisplayName, icon: "sparkle")
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help(modelCatalog.routerAvailable ? "대화 모델 선택" : "라우터 오프라인 — Claude 모델만 사용 가능")
+        .buttonStyle(.plain)
+        .help(modelPickerHelp)
+    }
+
+    private var modelPickerHelp: String {
+        switch harness {
+        case .codex:
+            return "Codex 모델 선택 · 라우터 없이 직접 실행"
+        case .opencode:
+            return "OpenCode 모델 선택 — opencode.json에 허용한 모델만 보입니다"
+        case .claude:
+            return modelCatalog.routerAvailable
+                ? "대화 모델 선택"
+                : "라우터 오프라인 — Claude 모델만 사용 가능"
+        }
     }
 
     private var effortPicker: some View {
@@ -188,26 +197,15 @@ struct QuickHomeView: View {
         .help("응답 생성 effort")
     }
 
-    private func modelButton(_ model: QuickModelOption) -> some View {
-        Button {
-            selectedModelID = model.id
-        } label: {
-            if selectedModelID == model.id {
-                Label(model.displayName, systemImage: "checkmark")
-            } else {
-                Text(model.displayName)
-            }
-        }
-    }
-
     private func constrainSelectedEffort() {
         let efforts = selectedModel.supportedEfforts
-        guard !efforts.contains(selectedEffort) else { return }
+        guard !efforts.isEmpty, !efforts.contains(selectedEffort) else { return }
         selectedEffort = efforts.contains(.high) ? .high : (efforts.first ?? .high)
     }
 
     private var currentConfiguration: QuickSessionConfiguration {
         QuickSessionConfiguration(
+            harness: harness,
             modelID: selectedModelID,
             effort: selectedEffort,
             proxyEnabled: proxyEnabled
@@ -219,36 +217,43 @@ struct QuickHomeView: View {
     }
 
     private var proxyButton: some View {
-        let requiresProxy = selectedModel.isCodex || selectedModel.isKimi || selectedModel.isGemini
+        let requiresProxy = selectedModel.requiresProxy
+        let locked = requiresProxy || selectedModel.isDefault || !modelCatalog.routerAvailable
         return Button {
-            guard modelCatalog.routerAvailable, !requiresProxy else { return }
+            guard !locked else { return }
             proxyEnabled.toggle()
         } label: {
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(proxyEnabled ? .primary : .secondary.opacity(0.72))
-                .frame(width: 27, height: 25)
+                .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
                         .fill(Color.primary.opacity(proxyEnabled ? 0.10 : 0.045))
                 )
         }
         .buttonStyle(.plain)
-        .disabled(!modelCatalog.routerAvailable || requiresProxy)
-        .help(requiresProxy ? "Codex, Kimi, Gemini 모델은 프록시 세션이 필수입니다" : "세션 내 모델 전환 허용")
+        .disabled(locked)
+        .help(proxyHelp)
+    }
+
+    private var proxyHelp: String {
+        if selectedModel.isDefault { return "기본 모드는 라우터 없이 터미널의 ccv와 똑같이 실행됩니다" }
+        if selectedModel.requiresProxy { return "Codex, Kimi, Gemini, Alibaba 모델은 프록시 세션이 필수입니다" }
+        return "세션 내 모델 전환 허용"
     }
 
     private func pickerLabel(_ title: String, icon: String) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-            Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
-            Image(systemName: "chevron.up.chevron.down")
+            Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+            Image(systemName: "chevron.down")
                 .font(.system(size: 7, weight: .bold))
                 .foregroundColor(.secondary.opacity(0.65))
         }
-        .foregroundColor(.secondary)
-        .padding(.horizontal, 8)
-        .frame(height: 25)
+        .foregroundColor(.primary.opacity(0.75))
+        .padding(.horizontal, 9)
+        .frame(height: 30)
         .background(
             RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
                 .fill(FineTheme.controlFill)
@@ -257,10 +262,20 @@ struct QuickHomeView: View {
 
     private var sessionModeDescription: String {
         if modelCatalog.isLoading { return "모델 목록 확인 중" }
-        if !modelCatalog.routerAvailable { return "라우터 오프라인 · Claude 직결만 사용 가능" }
-        if selectedModel.isCodex || selectedModel.isKimi || selectedModel.isGemini || proxyEnabled {
-            return "프록시 세션 · /model에서 Claude·Codex·Kimi·Gemini 전환 가능"
+        switch harness {
+        case .codex:
+            return "Codex로 시작합니다"
+        case .opencode:
+            return selectedModel.isDefault
+                ? "OpenCode 기본 모델로 시작합니다"
+                : "OpenCode에서 선택한 모델로 시작합니다"
+        case .claude:
+            if selectedModel.isDefault { return "Claude 기본 모델로 시작합니다" }
+            if !modelCatalog.routerAvailable { return "연결을 확인할 수 없어 Claude 모델만 사용할 수 있습니다" }
+            if selectedModel.requiresProxy || proxyEnabled {
+                return "대화 중에도 다른 제공사의 모델로 전환할 수 있습니다"
+            }
+            return "Claude로 시작합니다"
         }
-        return "Claude 직결 · 세션 안에서 Codex 전환 불가"
     }
 }

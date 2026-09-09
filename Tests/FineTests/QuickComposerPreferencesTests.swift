@@ -28,6 +28,55 @@ final class QuickComposerPreferencesTests: XCTestCase {
         QuickComposerPreferences.save(configuration, to: defaults)
 
         XCTAssertEqual(QuickComposerPreferences.load(from: defaults), configuration)
+
+        let opencode = QuickSessionConfiguration(
+            harness: .opencode,
+            modelID: "alibaba-token-plan/qwen3.8-max",
+            effort: .high,
+            proxyEnabled: false
+        )
+        QuickComposerPreferences.save(opencode, to: defaults)
+        XCTAssertEqual(QuickComposerPreferences.load(from: defaults), opencode)
+    }
+
+    func testUnavailableOpenCodeModelFallsBackToOpenCodeDefaultNotClaude() {
+        let stored = QuickSessionConfiguration(
+            harness: .opencode,
+            modelID: "openrouter/removed",
+            effort: .high,
+            proxyEnabled: false
+        )
+        let available = [
+            QuickModelOption.defaultOption(for: .opencode),
+            QuickModelOption(
+                id: "openai/gpt-5.6-sol",
+                displayName: "Codex · gpt-5.6-sol",
+                supportedEfforts: [],
+                harness: .opencode
+            ),
+        ]
+
+        XCTAssertEqual(
+            QuickComposerPreferences.resolved(stored, availableModels: available),
+            .defaultConfiguration(for: .opencode)
+        )
+        XCTAssertEqual(
+            QuickComposerPreferences.resolved(
+                QuickSessionConfiguration(
+                    harness: .opencode,
+                    modelID: "openai/gpt-5.6-sol",
+                    effort: .ultra,
+                    proxyEnabled: true
+                ),
+                availableModels: available
+            ),
+            QuickSessionConfiguration(
+                harness: .opencode,
+                modelID: "openai/gpt-5.6-sol",
+                effort: .high,
+                proxyEnabled: true
+            )
+        )
     }
 
     @MainActor

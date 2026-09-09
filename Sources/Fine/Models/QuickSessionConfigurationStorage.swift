@@ -27,19 +27,24 @@ final class QuickSessionConfigurationStorage {
     }
 
     func configuration(for sessionID: String) -> QuickSessionConfiguration? {
-        guard UUID(uuidString: sessionID) != nil else { return nil }
-        return configurations[sessionID.lowercased()]
+        guard let key = QuickSessionIdentifier.storageKey(sessionID) else { return nil }
+        return configurations[key]
     }
 
     func saveIfAbsent(_ configuration: QuickSessionConfiguration, for sessionID: String) {
-        guard UUID(uuidString: sessionID) != nil else { return }
-        let key = sessionID.lowercased()
+        guard let key = QuickSessionIdentifier.storageKey(sessionID) else { return }
         guard configurations[key] == nil else { return }
         configurations[key] = configuration
-        save()
+        persist()
     }
 
-    private func save() {
+    func save(_ configuration: QuickSessionConfiguration, for sessionID: String) {
+        guard let key = QuickSessionIdentifier.storageKey(sessionID) else { return }
+        configurations[key] = configuration
+        persist()
+    }
+
+    private func persist() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(configurations) else { return }

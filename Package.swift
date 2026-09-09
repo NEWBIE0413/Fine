@@ -10,7 +10,7 @@ let package = Package(
             name: "Fine",
             dependencies: ["CPty"],
             path: "Sources/Fine",
-            resources: [.copy("Terminal/Resources")]
+            resources: [.copy("Terminal/Resources"), .process("HarnessIcons.xcassets")]
         ),
         .testTarget(
             name: "FineTests",

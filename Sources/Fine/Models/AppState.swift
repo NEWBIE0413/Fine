@@ -29,6 +29,11 @@ final class AppState: ObservableObject {
             restoredFrame = claimed.frame
             restoredIsZoomed = claimed.resolvedIsZoomed
             restoredIsFullscreen = claimed.resolvedIsFullscreen
+            sessions = (claimed.sessions ?? []).map {
+                TerminalSession(snapshot: $0, configurationStorage: configurationStorage)
+            }
+            sessions.forEach(bindPersistence)
+            selectedSession = sessions.first { $0.id == claimed.selectedSessionID }
         } else {
             if let requestedWindowStateID, !storage.contains(id: requestedWindowStateID) {
                 windowStateID = requestedWindowStateID
@@ -53,10 +58,11 @@ final class AppState: ObservableObject {
     func addSession(
         initialPrompt: String? = nil,
         resumeSessionId: String? = nil,
-        configuration: QuickSessionConfiguration = .default
+        configuration: QuickSessionConfiguration = .default,
+        startImmediately: Bool = true
     ) {
         let launch: QuickLaunch
-        if let resumeSessionId, UUID(uuidString: resumeSessionId) != nil {
+        if let resumeSessionId, QuickSessionIdentifier.isValid(resumeSessionId, for: configuration.harness) {
             launch = .resume(sessionId: resumeSessionId)
         } else if let initialPrompt {
             let trimmed = initialPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,24 +71,35 @@ final class AppState: ObservableObject {
             launch = .blank
         }
         let session = TerminalSession(
+            name: QuickSessionPolicy.initialSessionName(for: configuration.harness),
             launch: launch,
             configuration: configuration,
             configurationStorage: configurationStorage
         )
+        bindPersistence(session)
         sessions.append(session)
         selectSession(session)
-        session.startImmediately()
+        if startImmediately { session.startImmediately() }
     }
 
-    func resumeConversation(_ conversation: QuickConversation) {
-        if let existing = sessions.first(where: { $0.matchesConversation(sessionId: conversation.id) }) {
+    func resumeConversation(_ conversation: QuickConversation, startImmediately: Bool = true) {
+        guard QuickSessionIdentifier.isValid(conversation.id, for: conversation.harness) else { return }
+        if let existing = sessions.first(where: {
+            $0.configuration.harness == conversation.harness && $0.matchesConversation(sessionId: conversation.id)
+        }) {
             selectSession(existing)
             return
         }
+        var configuration = QuickSessionConfiguration.defaultConfiguration(for: conversation.harness)
+        if let saved = configurationStorage.configuration(for: conversation.id), saved.harness == conversation.harness {
+            configuration = saved
+        }
         addSession(
             resumeSessionId: conversation.id,
-            configuration: resumeConfiguration(for: conversation.id)
+            configuration: configuration,
+            startImmediately: startImmediately
         )
+        selectedSession?.name = conversation.title
     }
 
     func resumeConversation(sessionId: String) {
@@ -96,12 +113,44 @@ final class AppState: ObservableObject {
         )
     }
 
+    @discardableResult
+    func restartSession(
+        _ session: TerminalSession,
+        with configuration: QuickSessionConfiguration,
+        startImmediately: Bool = true
+    ) -> Bool {
+        guard let index = sessions.firstIndex(of: session),
+              let sessionID = session.resumableSessionID else {
+            return false
+        }
+        configurationStorage.save(configuration, for: sessionID)
+        let replacement = TerminalSession(
+            name: session.name,
+            launch: .resume(sessionId: sessionID),
+            configuration: configuration,
+            configurationStorage: configurationStorage
+        )
+        bindPersistence(replacement)
+        let wasSelected = selectedSession === session
+        session.cleanup(force: true)
+        sessions[index] = replacement
+        if wasSelected {
+            selectedSession = replacement
+            if startImmediately {
+                replacement.startImmediately()
+                replacement.focusTerminal()
+            }
+        }
+        return true
+    }
+
     private func resumeConfiguration(for sessionID: String) -> QuickSessionConfiguration {
         configurationStorage.configuration(for: sessionID) ?? .default
     }
 
     func showHome() {
         selectedSession = nil
+        persistWindowState()
     }
 
     func removeSession(_ session: TerminalSession) {
@@ -110,6 +159,36 @@ final class AppState: ObservableObject {
         if selectedSession?.id == session.id {
             selectedSession = sessions.first
         }
+        persistWindowState()
+    }
+
+    /// Move existing objects, preserving the PTY, selection and conversation identity.
+    @discardableResult
+    func moveSession(id: UUID, to targetID: UUID) -> Bool {
+        guard id != targetID,
+              let source = sessions.firstIndex(where: { $0.id == id }),
+              let target = sessions.firstIndex(where: { $0.id == targetID }) else { return false }
+        return moveSession(id: id, relativeTo: targetID, edge: source < target ? .after : .before)
+    }
+
+    /// Insert at a boundary in the original list, adjusting for removal of the source.
+    @discardableResult
+    func moveSession(id: UUID, relativeTo targetID: UUID, edge: SessionInsertionEdge) -> Bool {
+        guard let target = sessions.firstIndex(where: { $0.id == targetID }),
+              let source = sessions.firstIndex(where: { $0.id == id }) else { return false }
+        let boundary = target + (edge == .after ? 1 : 0)
+        let destination = boundary - (source < boundary ? 1 : 0)
+        guard source != destination else { return false }
+        let session = sessions.remove(at: source)
+        sessions.insert(session, at: destination)
+        persistWindowState()
+        return true
+    }
+
+    func moveSession(id: UUID, by offset: Int) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }),
+              sessions.indices.contains(index + offset) else { return }
+        moveSession(id: id, to: sessions[index + offset].id)
     }
 
     /// 창이 닫히거나 앱이 종료될 때 이 창의 모든 세션을 정리한다.
@@ -137,6 +216,7 @@ final class AppState: ObservableObject {
         selectedSession = session
         session.restartIfDead()
         session.focusTerminal()
+        persistWindowState()
     }
 
     func selectNextSession() {
@@ -175,13 +255,22 @@ final class AppState: ObservableObject {
             id: windowStateID,
             frame: restoredFrame,
             isZoomed: restoredIsZoomed,
-            isFullscreen: restoredIsFullscreen
+            isFullscreen: restoredIsFullscreen,
+            sessions: sessions.map { $0.snapshot() },
+            selectedSessionID: selectedSession?.id
         ))
     }
 
     private func observeSelectedSession() {
         selectedSessionObservation = selectedSession?.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.objectWillChange.send() }
+        }
+    }
+
+    private func bindPersistence(_ session: TerminalSession) {
+        session.setPersistenceHandler { [weak self, weak session] in
+            guard let self, session != nil, !AppTermination.isTerminating else { return }
+            self.persistWindowState()
         }
     }
 }

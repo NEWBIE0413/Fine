@@ -37,3 +37,41 @@ enum QuickSessionTitleResolver {
         URL(fileURLWithPath: path).standardizedFileURL.path
     }
 }
+
+enum CodexSessionResolver {
+    static func sessionId(processIdentifier: pid_t) -> String? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-Fn", "-p", String(processIdentifier)]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        let data: Data
+        do {
+            try process.run()
+            data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard process.terminationStatus == 0,
+              let value = String(data: data, encoding: .utf8)
+        else { return nil }
+        return sessionId(fromLsofOutput: value)
+    }
+
+    static func sessionId(fromLsofOutput output: String) -> String? {
+        for line in output.split(whereSeparator: \.isNewline) {
+            guard line.first == "n" else { continue }
+            let path = String(line.dropFirst())
+            guard path.contains("/.codex/sessions/"),
+                  path.hasSuffix(".jsonl"),
+                  let marker = path.range(of: "rollout-", options: .backwards)
+            else { continue }
+            let value = String(path[marker.upperBound...].dropLast(".jsonl".count))
+            let candidate = String(value.suffix(36))
+            if UUID(uuidString: candidate) != nil { return candidate.lowercased() }
+        }
+        return nil
+    }
+}

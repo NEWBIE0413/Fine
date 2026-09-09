@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding private var sceneWindowStateID: UUID?
     @StateObject private var appState: AppState
     @Environment(\.openWindow) private var openWindow
@@ -17,15 +18,19 @@ struct ContentView: View {
             QuickSidebarView()
                 .frame(width: FineTheme.sidebarWidth)
 
-            Group {
+            ZStack {
                 if let session = appState.selectedSession {
-                    AgentTerminalView(session: session).id(session.id)
+                    AgentTerminalView(session: session)
+                        .id(session.id)
+                        .transition(.opacity)
                 } else {
                     QuickHomeView()
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(FineTheme.workspace)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: appState.selectedSession?.id)
         }
         .background(Color.clear)
         .ignoresSafeArea(.container, edges: .top)

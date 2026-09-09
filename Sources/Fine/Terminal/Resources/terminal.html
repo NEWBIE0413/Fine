@@ -34,6 +34,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     user-select: none;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+  #fine-status:hover {
+    color: rgb(0 0 0 / 72%);
+    background: rgb(0 0 0 / 3%);
   }
   /* 한글 조합 프리뷰: 네이티브 IME처럼 테마 색 + 밑줄로 표시 (기본은 검정 박스) */
   #terminal .composition-view {
@@ -209,9 +216,18 @@
   window.smSelectAll = function () { term.selectAll(); };
   window.smFocus = function () { term.focus(); };
   window.smFit = function () { try { fit.fit(); } catch (e) {} };
+  // 하네스별 하단 크롭: Claude Code의 힌트 행만 Fine 상태줄로 대체하고,
+  // 자체 입력/상태 행을 그리는 OpenCode는 한 줄도 가리지 않는다.
+  window.smSetFooterCrop = function (px) {
+    document.documentElement.style.setProperty('--footer-crop', (px || 0) + 'px');
+    try { fit.fit(); } catch (e) {}
+  };
   window.smSetStatus = function (status) {
     document.getElementById('fine-status').textContent = status || '';
   };
+  document.getElementById('fine-status').addEventListener('click', function () {
+    post('statusClick');
+  });
   window.smSetTheme = function (theme) {
     term.options.theme = theme;
     document.documentElement.style.setProperty('--term-bg', theme.background);

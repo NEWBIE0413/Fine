@@ -3,11 +3,19 @@ import XCTest
 
 final class WindowStateStorageTests: XCTestCase {
     func testRoundtripIncludesFrameAndPresentationFlags() throws {
+        let sessionID = UUID()
         let state = WindowState(
             id: UUID(),
             frame: WindowFrameState(x: 100, y: 80, width: 900, height: 600),
             isZoomed: true,
-            isFullscreen: false
+            isFullscreen: false,
+            sessions: [QuickSessionSnapshot(
+                id: sessionID,
+                name: "Active Codex",
+                conversationID: UUID().uuidString,
+                configuration: .defaultConfiguration(for: .codex)
+            )],
+            selectedSessionID: sessionID
         )
         let decoded = try JSONDecoder().decode(
             WindowState.self,
@@ -16,6 +24,8 @@ final class WindowStateStorageTests: XCTestCase {
         XCTAssertEqual(decoded, state)
         XCTAssertTrue(decoded.resolvedIsZoomed)
         XCTAssertFalse(decoded.resolvedIsFullscreen)
+        XCTAssertEqual(decoded.sessions?.first?.configuration.harness, .codex)
+        XCTAssertEqual(decoded.selectedSessionID, sessionID)
     }
 
     func testLegacyStateDefaultsPresentationFlags() throws {

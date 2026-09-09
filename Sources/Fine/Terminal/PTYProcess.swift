@@ -117,7 +117,7 @@ final class PTYProcess {
     private var writeSource: DispatchSourceWrite?
     private var pendingWrite = Data()
     private var isNonBlocking = false
-    private let ioQueue = DispatchQueue(label: "space-manager.pty.io")
+    private let ioQueue = DispatchQueue(label: "fine.pty.io")
 
     func start(executable: String, execName: String, arguments: [String],
                environment: [String: String], workingDirectory: String,

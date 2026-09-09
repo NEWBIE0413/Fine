@@ -9,9 +9,15 @@ import WebKit
 /// 추적하는 한글 조합 미리보기도 함께 이동하므로 redraw 후보만 짧게 모은다.
 enum TerminalOutputBatchPolicy {
     static let coalesceInterval: CFTimeInterval = 0.008
+    static let hiddenCoalesceInterval: CFTimeInterval = 0.1
     static let cursorSpanRetryInterval: CFTimeInterval = 0.004
     static let maximumCursorSpanHold: CFTimeInterval = 0.032
     static let immediateByteLimit = 256
+
+    static func flushDelay(for data: Data, elapsed: CFTimeInterval, visible: Bool) -> CFTimeInterval {
+        if !visible { return hiddenCoalesceInterval }
+        return shouldFlushImmediately(data, elapsedSinceLastFlush: elapsed) ? 0 : coalesceInterval
+    }
 
     private static let cursorHide = Data([0x1B, 0x5B, 0x3F, 0x32, 0x35, 0x6C]) // ESC[?25l
     private static let cursorShow = Data([0x1B, 0x5B, 0x3F, 0x32, 0x35, 0x68]) // ESC[?25h
@@ -79,18 +85,24 @@ final class TerminalWebView: NSView {
     var onResize: ((UInt16, UInt16) -> Void)?
     var onReady: (() -> Void)?
     var onWebProcessCrash: (() -> Void)?
+    var onStatusClick: (() -> Void)?
 
     private(set) var lastCols: UInt16 = 80
     private(set) var lastRows: UInt16 = 24
 
+    /// Height of Claude Code's built-in hint row that the Fine status rail replaces.
+    static let claudeFooterCrop: CGFloat = 18
+
     private let palette: TerminalPalette
     private let statusText: String
+    private let footerCrop: CGFloat
     private let webView: WKWebView
     private var isReady = false
     private var pendingOutput = Data()
     private var pendingSince: CFTimeInterval?
     private var flushScheduled = false
     private var lastFlushTime: CFTimeInterval = 0
+    private var lastFittedSize: CGSize?
 
     override convenience init(frame: NSRect) {
         self.init(
@@ -100,9 +112,15 @@ final class TerminalWebView: NSView {
         )
     }
 
-    init(frame: NSRect, palette: TerminalPalette, statusText: String) {
+    init(
+        frame: NSRect,
+        palette: TerminalPalette,
+        statusText: String,
+        footerCrop: CGFloat = TerminalWebView.claudeFooterCrop
+    ) {
         self.palette = palette
         self.statusText = statusText
+        self.footerCrop = footerCrop
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: frame, configuration: config)
         super.init(frame: frame)
@@ -132,6 +150,7 @@ final class TerminalWebView: NSView {
 
     func reloadPage() {
         isReady = false
+        lastFittedSize = nil
         loadPage()
     }
 
@@ -144,16 +163,17 @@ final class TerminalWebView: NSView {
             if self.pendingOutput.isEmpty { self.pendingSince = now }
             self.pendingOutput.append(data)
             guard !self.flushScheduled else { return }
-            // 어댑티브 플러시: 한가할 땐 즉시 전송(타이핑 에코 지연 0),
-            // 직전 플러시 직후의 출력과 유휴 뒤 redraw 후보만 8ms 모은다.
-            if TerminalOutputBatchPolicy.shouldFlushImmediately(
-                self.pendingOutput,
-                elapsedSinceLastFlush: now - self.lastFlushTime
-            ) {
-                self.flushOutput()
-            } else {
-                self.scheduleFlush(after: TerminalOutputBatchPolicy.coalesceInterval)
-            }
+            // Background terminals keep every byte and continue running; only
+            // the native-to-WebKit bridge cadence slows while offscreen.
+            let visible = self.window.map {
+                $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible)
+            } ?? false
+            let delay = TerminalOutputBatchPolicy.flushDelay(
+                for: self.pendingOutput, elapsed: now - self.lastFlushTime,
+                visible: visible && !self.isHiddenOrHasHiddenAncestor
+            )
+            if delay == 0 { self.flushOutput() }
+            else { self.scheduleFlush(after: delay) }
         }
     }
 
@@ -180,7 +200,8 @@ final class TerminalWebView: NSView {
         guard isReady, !pendingOutput.isEmpty else { return }
         lastFlushTime = CACurrentMediaTime()
         let b64 = pendingOutput.base64EncodedString()
-        pendingOutput.removeAll(keepingCapacity: true)
+        // Reuse small batches without retaining a one-off output spike forever.
+        pendingOutput.removeAll(keepingCapacity: pendingOutput.count <= 262_144)
         pendingSince = nil
         webView.evaluateJavaScript("window.smWrite('\(b64)')", completionHandler: nil)
     }
@@ -201,7 +222,8 @@ final class TerminalWebView: NSView {
     // ResizeObserver가 초기 핏을 놓칠 수 있어, 네이티브 레이아웃 변경마다 명시적으로 핏한다
     override func layout() {
         super.layout()
-        if isReady {
+        if isReady, lastFittedSize != bounds.size {
+            lastFittedSize = bounds.size
             webView.evaluateJavaScript("window.smFit && window.smFit()", completionHandler: nil)
         }
     }
@@ -243,7 +265,7 @@ final class TerminalWebView: NSView {
 
     // MARK: - JS → Swift
 
-    fileprivate func handleBridgeMessage(_ body: Any) {
+    func handleBridgeMessage(_ body: Any) {
         guard let dict = body as? [String: Any], let type = dict["type"] as? String else { return }
         switch type {
         case "ready":
@@ -255,6 +277,7 @@ final class TerminalWebView: NSView {
             isReady = true
             applyTheme()
             applyStatus()
+            applyFooterCrop()
             flushOutput()
             webView.evaluateJavaScript("window.smFit && window.smFit()", completionHandler: nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -272,9 +295,18 @@ final class TerminalWebView: NSView {
                 lastRows = UInt16(rows)
                 onResize?(UInt16(cols), UInt16(rows))
             }
+        case "statusClick":
+            onStatusClick?()
         default:
             break
         }
+    }
+
+    private func applyFooterCrop() {
+        webView.evaluateJavaScript(
+            "window.smSetFooterCrop && window.smSetFooterCrop(\(Int(footerCrop)))",
+            completionHandler: nil
+        )
     }
 
     private func applyStatus() {

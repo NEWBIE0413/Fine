@@ -7,11 +7,23 @@ struct WindowFrameState: Codable, Equatable {
     var height: Double
 }
 
+/// A terminal process cannot survive an app restart. Fine persists the durable
+/// provider conversation identity and recreates the PTY by resuming it.
+struct QuickSessionSnapshot: Codable, Equatable, Identifiable {
+    let id: UUID
+    var name: String
+    var conversationID: String?
+    var configuration: QuickSessionConfiguration
+}
+
 struct WindowState: Codable, Identifiable, Equatable {
     let id: UUID
     var frame: WindowFrameState?
     var isZoomed: Bool?
     var isFullscreen: Bool?
+    /// Optional for compatibility with Fine state files written before session restoration.
+    var sessions: [QuickSessionSnapshot]? = nil
+    var selectedSessionID: UUID? = nil
 
     var resolvedIsZoomed: Bool { isZoomed ?? false }
     var resolvedIsFullscreen: Bool { isFullscreen ?? false }
