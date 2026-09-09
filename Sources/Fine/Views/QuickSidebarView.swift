@@ -6,6 +6,7 @@ struct QuickSidebarView: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var recentScanner = QuickConversationScanner.shared
     @State private var isHoveringNew = false
+    @AppStorage("recentConversationsExpanded") private var recentExpanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -84,58 +85,106 @@ struct QuickSidebarView: View {
                 .frame(height: min(208, CGFloat(appState.sessions.count) * 37))
             }
 
-            QuickSectionHeader(title: "최근 항목") {
-                Button {
-                    recentScanner.rescan()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("최근 대화 새로고침")
-            }
-
-            Group {
-                if recentScanner.conversations.isEmpty {
-                    Text(recentScanner.isLoading ? "최근 대화를 불러오는 중…" : "최근 대화가 없습니다")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, FineTheme.sidebarInset)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 3) {
-                            ForEach(recentScanner.conversations, id: \.listID) { conversation in
-                                QuickRecentConversationRow(
-                                    conversation: conversation,
-                                    onResume: {
-                                        appState.resumeConversation(conversation)
-                                    }
-                                )
-                            }
-                            if recentScanner.hasMore {
-                                Button(recentScanner.isLoading ? "불러오는 중…" : "더 보기") { recentScanner.loadNextPage() }
-                                    .font(.system(size: 11))
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
-                                    .disabled(recentScanner.isLoading)
-                                    .padding(.vertical, 12)
-                                    .onAppear { recentScanner.loadNextPage() }
-                            }
-                        }
-                        .padding(.horizontal, FineTheme.sidebarInset)
+            ZStack(alignment: .bottom) {
+                if recentExpanded {
+                    VStack(alignment: .leading, spacing: 0) {
+                        recentHeader
+                        recentConversations
                     }
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    Button { recentExpanded = true } label: {
+                        recentHandle
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("최근 항목 펼치기")
+                    .help("최근 항목 펼치기")
+                    .padding(.horizontal, FineTheme.sidebarInset)
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .clipped()
+            .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 1), value: recentExpanded)
         }
         .frame(maxHeight: .infinity)
         .background { GlassSidebarBackground() }
         .onAppear {
             recentScanner.start()
         }
+    }
+
+    private var recentHandle: some View {
+        Capsule()
+            .fill(Color.secondary.opacity(0.45))
+            .frame(width: 28, height: 2)
+            .accessibilityHidden(true)
+    }
+
+    private var recentHeader: some View {
+        QuickSectionHeader(title: "최근 항목") {
+            Button { recentExpanded = false } label: {
+                recentHandle
+                    .frame(width: 44, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("최근 항목 숨기기")
+            .help("최근 항목 숨기기")
+            Button {
+                recentScanner.rescan()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("최근 대화 새로고침")
+        }
+
+    }
+
+    private var recentConversations: some View {
+        Group {
+            if recentScanner.conversations.isEmpty {
+                Text(recentScanner.isLoading ? "최근 대화를 불러오는 중…" : "최근 대화가 없습니다")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, FineTheme.sidebarInset)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        ForEach(recentScanner.conversations, id: \.listID) { conversation in
+                            QuickRecentConversationRow(
+                                conversation: conversation,
+                                onResume: {
+                                    appState.resumeConversation(conversation)
+                                }
+                            )
+                        }
+                        if recentScanner.hasMore {
+                            Button(recentScanner.isLoading ? "불러오는 중…" : "더 보기") { recentScanner.loadNextPage() }
+                                .font(.system(size: 11))
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .disabled(recentScanner.isLoading)
+                                .padding(.vertical, 12)
+                                .onAppear { recentScanner.loadNextPage() }
+                        }
+                    }
+                    .padding(.horizontal, FineTheme.sidebarInset)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
