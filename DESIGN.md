@@ -269,3 +269,9 @@ connects harness changes; picker presentation uses a restrained fade and scale.
 Single-provider catalogs omit the provider rail, large catalogs offer search,
 and model labels wrap to two lines. The composer uses a borderless glass surface.
 Reduce Motion removes decorative movement.
+
+Codex runtime resume identity follows the unique writable rollout in the PTY process
+group (including npm's native child). Read-only history and overlapping writers
+never replace the saved identity. This also updates the next relaunch after
+`/resume` or a fork. The existing metadata timer performs this bounded local
+lookup; if its cost becomes material, replace lsof with native process-FD queries.

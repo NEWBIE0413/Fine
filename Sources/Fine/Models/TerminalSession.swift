@@ -26,6 +26,10 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     private let metadataQueue = DispatchQueue(label: "Fine.SessionMetadata", qos: .utility)
 
     var resumableSessionID: String? { sessionId }
+    var currentLaunch: QuickLaunch {
+        if configuration.harness == .codex, let sessionId { return .resume(sessionId: sessionId) }
+        return launch
+    }
 
     init(
         id: UUID = UUID(),
@@ -118,7 +122,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         // Pin a restored "latest" launch before starting the CLI so title lookup
         // and the actual resume command use exactly the same conversation.
         let effectiveLaunch = HarnessSessionStore.local.resolvingLatest(
-            launch, harness: configuration.harness, workingDirectory: directory
+            currentLaunch, harness: configuration.harness, workingDirectory: directory
         )
         if case .resume(let id) = effectiveLaunch { sessionId = id }
         var environment = ProcessInfo.processInfo.environment
@@ -163,7 +167,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         titleCancellable = nil
         metadataGeneration = UUID()
         metadataRefreshInFlight = false
-        if case .resume = launch {} else if case .resumeLatest = launch, sessionId != nil {} else {
+        if configuration.harness == .codex, sessionId != nil {} else if case .resume = launch {} else if case .resumeLatest = launch, sessionId != nil {} else {
             sessionId = nil
             name = initialName
         }
@@ -208,19 +212,22 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         metadataQueue.async { [weak self] in
             let store = store ?? HarnessSessionStore.local
             let resolvedID: String?
-            if let knownID {
+            let activeCodexID = harness == .codex
+                ? CodexSessionResolver.sessionId(processIdentifier: processIdentifier) : nil
+            if let activeCodexID {
+                resolvedID = activeCodexID
+            } else if let knownID {
                 resolvedID = knownID
             } else {
                 switch harness {
                 case .claude:
                     resolvedID = QuickSessionTitleResolver.sessionId(processIdentifier: processIdentifier)
                 case .codex:
-                    resolvedID = CodexSessionResolver.sessionId(processIdentifier: processIdentifier)
-                        ?? store.newSessionID(
-                            harness: harness, createdAfter: startedAt,
-                            workingDirectory: QuickSessionPolicy.workingDirectory,
-                            initialPrompt: initialPrompt
-                        )
+                    resolvedID = store.newSessionID(
+                        harness: harness, createdAfter: startedAt,
+                        workingDirectory: QuickSessionPolicy.workingDirectory,
+                        initialPrompt: initialPrompt
+                    )
                 case .opencode:
                     resolvedID = store.newSessionID(
                         harness: harness, createdAfter: startedAt,
@@ -235,16 +242,21 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metadataGeneration == generation else { return }
                 self.metadataRefreshInFlight = false
-                if let metadata { self.applyMetadata(metadata) }
+                if let metadata {
+                    self.applyMetadata(metadata, confirmedCodexIdentity: activeCodexID)
+                }
             }
         }
     }
 
-    func applyMetadata(_ metadata: HarnessSessionMetadata) {
-        guard sessionId == nil || sessionId == metadata.id else { return }
-        let identityChanged = sessionId == nil
+    func applyMetadata(_ metadata: HarnessSessionMetadata, confirmedCodexIdentity: String? = nil) {
+        let confirmedSwitch = configuration.harness == .codex
+            && confirmedCodexIdentity == metadata.id
+        guard sessionId == nil || sessionId == metadata.id || confirmedSwitch else { return }
+        let identityChanged = sessionId != metadata.id
         sessionId = metadata.id
         if identityChanged {
+            if confirmedSwitch { name = metadata.title ?? initialName }
             configurationStorage.saveIfAbsent(configuration, for: metadata.id)
             persistenceHandler?()
         }

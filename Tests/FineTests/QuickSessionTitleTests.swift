@@ -6,9 +6,42 @@ import XCTest
 final class QuickSessionTitleTests: XCTestCase {
     func testCodexIdentityParsesOpenRolloutPath() {
         let id = "66b557a0-8d77-4bb4-8816-913e80aac3ea"
-        let output = "p123\nfcwd\nn/Users/test/.codex/sessions/2026/09/09/rollout-2026-09-09T10-20-00-\(id).jsonl\n"
+        let output = "p123\nf46\nau\nn/Users/test/.codex/sessions/2026/09/09/rollout-2026-09-09T10-20-00-\(id).jsonl\n"
         XCTAssertEqual(CodexSessionResolver.sessionId(fromLsofOutput: output), id)
         XCTAssertNil(CodexSessionResolver.sessionId(fromLsofOutput: "n/tmp/rollout-\(id).jsonl"))
+    }
+
+    func testCodexIdentityRejectsReadOnlyAndAmbiguousRollouts() {
+        let old = "66b557a0-8d77-4bb4-8816-913e80aac3ea"
+        let new = "01a08539-e646-72a3-9d7d-1036add0f2d1"
+        func record(_ id: String, access: String) -> String {
+            "f46\na\(access)\nn/Users/test/.codex/sessions/2026/09/09/rollout-2026-09-09T10-20-00-\(id).jsonl\n"
+        }
+        XCTAssertNil(CodexSessionResolver.sessionId(fromLsofOutput: record(old, access: "r")))
+        XCTAssertEqual(CodexSessionResolver.sessionId(fromLsofOutput:
+            "p123\n" + record(old, access: "r") + "p124\n" + record(new, access: "u")), new)
+        XCTAssertNil(CodexSessionResolver.sessionId(fromLsofOutput:
+            record(old, access: "u") + record(new, access: "w")))
+        XCTAssertEqual(CodexSessionResolver.sessionId(fromLsofOutput:
+            record(new, access: "u") + record(new, access: "w")), new)
+    }
+
+    func testConfirmedCodexResumeSwitchUpdatesSnapshotAndNextLaunch() {
+        let old = "66b557a0-8d77-4bb4-8816-913e80aac3ea"
+        let new = "01a08539-e646-72a3-9d7d-1036add0f2d1"
+        let session = TerminalSession(name: "Old", launch: .resume(sessionId: old),
+                                      configuration: .defaultConfiguration(for: .codex))
+        var writes = 0
+        session.setPersistenceHandler { writes += 1 }
+        session.applyMetadata(.init(id: new, title: "Latest"))
+        XCTAssertEqual(session.resumableSessionID, old)
+        session.applyMetadata(.init(id: new, title: "Latest"), confirmedCodexIdentity: new)
+        XCTAssertEqual(session.snapshot().conversationID, new)
+        XCTAssertEqual(session.name, "Latest")
+        XCTAssertEqual(session.currentLaunch, .resume(sessionId: new))
+        XCTAssertGreaterThan(writes, 0)
+        session.applyMetadata(.init(id: old, title: "Stale"))
+        XCTAssertEqual(session.resumableSessionID, new)
     }
 
     func testNativeStoresPreferCodexSummaryAndOpenCodeTitleAndRefresh() throws {

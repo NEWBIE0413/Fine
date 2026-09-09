@@ -40,10 +40,15 @@ enum QuickSessionTitleResolver {
 
 enum CodexSessionResolver {
     static func sessionId(processIdentifier: pid_t) -> String? {
+        guard processIdentifier > 0 else { return nil }
+        // forkpty's group includes the npm launcher and its native Codex child,
+        // but excludes tools that start their own process groups.
+        let group = getpgid(processIdentifier)
+        guard group == processIdentifier else { return nil }
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-Fn", "-p", String(processIdentifier)]
+        process.arguments = ["-a", "-g", String(group), "-Ffan"]
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         let data: Data
@@ -61,8 +66,12 @@ enum CodexSessionResolver {
     }
 
     static func sessionId(fromLsofOutput output: String) -> String? {
+        var writable = false
+        var candidates = Set<String>()
         for line in output.split(whereSeparator: \.isNewline) {
-            guard line.first == "n" else { continue }
+            if line.first == "p" || line.first == "f" { writable = false }
+            if line.first == "a" { writable = line == "aw" || line == "au" }
+            guard writable, line.first == "n" else { continue }
             let path = String(line.dropFirst())
             guard path.contains("/.codex/sessions/"),
                   path.hasSuffix(".jsonl"),
@@ -70,8 +79,10 @@ enum CodexSessionResolver {
             else { continue }
             let value = String(path[marker.upperBound...].dropLast(".jsonl".count))
             let candidate = String(value.suffix(36))
-            if UUID(uuidString: candidate) != nil { return candidate.lowercased() }
+            if UUID(uuidString: candidate) != nil { candidates.insert(candidate.lowercased()) }
         }
-        return nil
+        // Multiple writers can briefly overlap during /resume or a fork.
+        // Retain the known identity until there is one unambiguous writer.
+        return candidates.count == 1 ? candidates.first : nil
     }
 }
