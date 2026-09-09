@@ -127,14 +127,6 @@ struct QuickSidebarView: View {
 
     private var recentHeader: some View {
         QuickSectionHeader(title: "최근 항목") {
-            Button { recentExpanded = false } label: {
-                recentHandle
-                    .frame(width: 44, height: 26)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("최근 항목 숨기기")
-            .help("최근 항목 숨기기")
             Button {
                 recentScanner.rescan()
             } label: {
@@ -147,7 +139,19 @@ struct QuickSidebarView: View {
             .buttonStyle(.plain)
             .help("최근 대화 새로고침")
         }
-
+        .overlay {
+            Button { recentExpanded = false } label: {
+                recentHandle
+                    .frame(width: 44, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("최근 항목 숨기기")
+            .help("최근 항목 숨기기")
+                // Match the section header's vertical content insets.
+                .padding(.top, 18)
+                .padding(.bottom, 5)
+        }
     }
 
     private var recentConversations: some View {
