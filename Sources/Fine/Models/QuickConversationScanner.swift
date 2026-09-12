@@ -39,7 +39,7 @@ final class QuickConversationScanner: ObservableObject {
     }
 
     static func defaultTranscriptsDirectory() -> URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = FinePaths.home
         let encoded = QuickSessionPolicy.workingDirectory.replacingOccurrences(of: "/", with: "-")
         return home.appendingPathComponent(".claude/projects").appendingPathComponent(encoded)
     }

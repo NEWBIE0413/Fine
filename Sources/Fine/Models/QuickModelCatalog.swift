@@ -450,7 +450,7 @@ enum CodexModelDiscovery {
     }
 
     static var cacheFile: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        FinePaths.home
             .appendingPathComponent(".codex/models_cache.json")
     }
 
@@ -590,7 +590,7 @@ enum ClaudeCLIModelDiscovery {
         executablePath: String? = nil,
         stringsPath: String = "/usr/bin/strings"
     ) -> [QuickModelOption] {
-        let candidate = executablePath ?? FileManager.default.homeDirectoryForCurrentUser
+        let candidate = executablePath ?? FinePaths.home
             .appendingPathComponent(".local/bin/claude")
             .path
         let executable = URL(fileURLWithPath: candidate).resolvingSymlinksInPath().path

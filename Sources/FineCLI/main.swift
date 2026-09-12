@@ -3,7 +3,8 @@ import Foundation
 // fine — Fine CLI. 앱의 제어 소켓(~/.fine/control.sock)에 JSON 한 줄을 보내고
 // 응답을 사람이 읽기 좋게, 또는 --json으로 그대로 출력한다. 앱이 안 떠 있으면 띄우고 기다린다.
 
-let socketPath = (NSHomeDirectory() as NSString).appendingPathComponent(".fine/control.sock")
+let dataHome = ProcessInfo.processInfo.environment["FINE_HOME"].flatMap { $0.hasPrefix("/") ? $0 : nil } ?? NSHomeDirectory()
+let socketPath = (dataHome as NSString).appendingPathComponent(".fine/control.sock")
 let bundleID = "com.seol.fine"
 
 let usage = """
@@ -26,6 +27,15 @@ fine — Fine을 터미널에서 조작한다
   fine tab move <tab> <index|+1|-1>         탭 순서 이동
   fine home                                 홈(새 대화 화면)으로
 
+  fine read <tab> [lines]                   탭 화면 읽기 (tmux capture-pane)
+  fine send <tab> <text>                    탭에 글자 입력 (헤더·Enter 없음)
+  fine keys <tab> <key…>                    특수키 (Enter, Escape, C-c, Up …)
+  fine msg <tab|%pane> <text>               smux 헤더를 붙여 메시지 (읽기 → msg → keys Enter)
+  fine transcript <tab> [-n N]              대화 본문 (하네스 transcript에서 구조화)
+  fine id                                   이 탭의 fine:<UUID> 주소 (FINE_TAB_ID)
+  fine resolve <target>                    고정 주소로 해석
+  fine trust|untrust <target>               승인된 대화 범위 등록/해제
+
   fine models [--harness H]                 하네스가 아는 모델·effort
   fine state                                window-states.json 덤프
   fine ping
@@ -33,6 +43,10 @@ fine — Fine을 터미널에서 조작한다
 옵션: --json (원본 JSON), -w/--window <index|id 접두사|front>, --no-focus
 <win>은 index / id 접두사 / front, <tab>은 index / 이름 / session-id / id 접두사
 --model default 는 "기본 (터미널과 동일)"
+
+메시징은 smux 프로토콜과 같다: read로 상대를 먼저 보고, msg로 보내고, read로 확인한 뒤 keys Enter.
+대상: Fine 탭 이름/ID, %pane, tmux:라벨, arch:라벨, mac:fine:<UUID>.
+읽기 가드·trust·첫 연락·답장 주소는 tmux-bridge가 공통으로 처리한다.
 """
 
 struct CLIError: Error { let message: String }
@@ -51,6 +65,7 @@ func send(_ command: String, _ args: [String: Any]) throws -> [String: Any] {
     defer { close(fd) }
     var addr = sockaddr_un(); addr.sun_family = sa_family_t(AF_UNIX)
     let bytes = Array(socketPath.utf8CString)
+    guard bytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { throw CLIError(message: "socket path is too long") }
     withUnsafeMutableBytes(of: &addr.sun_path) { $0.copyBytes(from: bytes.map { UInt8(bitPattern: $0) }) }
     let rc = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }
     guard rc == 0 else { throw CLIError(message: "cannot connect to \(socketPath): \(String(cString: strerror(errno))) — is Fine (with control server) running?") }
@@ -64,6 +79,28 @@ func send(_ command: String, _ args: [String: Any]) throws -> [String: Any] {
     return obj
 }
 
+// MARK: - 공통 smux 프로토콜
+
+/// Fine 이름은 Fine 탭, %pane은 tmux, host:target은 원격. tmux 라벨은
+/// tmux:label로 명시해 같은 이름의 Fine 탭과 혼동하지 않는다.
+func bridgeTarget(_ target: String) -> String {
+    if target.hasPrefix("tmux:") { return String(target.dropFirst(5)) }
+    if target.hasPrefix("%") || target.contains(":") { return target }
+    return "fine:" + target
+}
+
+func bridge(_ command: String, _ target: String, _ arguments: [String]) throws -> Never {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["tmux-bridge", command, bridgeTarget(target)] + arguments
+    process.standardInput = FileHandle.standardInput
+    process.standardOutput = FileHandle.standardOutput
+    process.standardError = FileHandle.standardError
+    try process.run()
+    process.waitUntilExit()
+    exit(process.terminationStatus)
+}
+
 // MARK: - 인자 파싱
 
 var argv = Array(CommandLine.arguments.dropFirst())
@@ -75,6 +112,10 @@ var flags: [String: String] = [:]
 var i = 0
 while i < argv.count {
     let a = argv[i]
+    // Once a messaging target is parsed, remaining argv is literal payload.
+    if ["send", "msg", "message", "keys"].contains(positional.first ?? ""), positional.count >= 2 {
+        positional.append(a); i += 1; continue
+    }
     switch a {
     case "--json": wantJSON = true
     case "--no-focus": noFocus = true
@@ -108,6 +149,21 @@ func modelFlags() {
 let command: String
 do {
     switch (group, sub) {
+    case ("id", _):
+        guard let raw = ProcessInfo.processInfo.environment["FINE_TAB_ID"], let tab = UUID(uuidString: raw) else {
+            throw CLIError(message: "not running inside a Fine tab (FINE_TAB_ID is unset)")
+        }
+        print("fine:" + tab.uuidString.lowercased()); exit(0)
+    case ("read", _), ("resolve", _), ("trust", _), ("untrust", _):
+        guard let target = sub else { throw CLIError(message: "usage: fine \(group) <target>") }
+        try bridge(group, target, rest)
+    case ("send", _), ("keys", _), ("msg", _), ("message", _):
+        guard let target = sub, !rest.isEmpty else { throw CLIError(message: "usage: fine \(group) <target> <text/key…>") }
+        try bridge(group == "send" ? "type" : group, target,
+                   group == "keys" ? rest : [rest.joined(separator: " ")])
+    default: break
+    }
+    switch (group, sub) {
     case ("ping", _): command = "ping"
     case ("windows", _): command = "windows.list"
     case ("window", "new"): command = "window.new"
@@ -131,6 +187,9 @@ do {
     case ("tab", "next"), ("tab", "prev"): command = "tab.\(sub!)"
     case ("tab", "move"):
         let a = try need(2, "fine tab move <tab> <index|+1|-1>"); command = "tab.move"; args["tab"] = a[0]; args["to"] = a[1]
+    case ("transcript", _):
+        guard let tab = sub else { throw CLIError(message: "usage: fine transcript <tab> [-n N]") }
+        command = "tab.transcript"; args["tab"] = tab; args["limit"] = Int(flags["limit"] ?? "20") ?? 20
     case ("home", _): command = "home"
     case ("models", _): command = "models.list"
     case ("state", _): command = "state.dump"
@@ -195,6 +254,11 @@ func render(command: String, result: Any) -> String {
     case "conversations.list":
         let rows = (result as? [[String: Any]] ?? []).map { c in [str(c["harness"]), str(c["id"]), String(str(c["modifiedAt"]).prefix(16)), str(c["title"])] }
         return table([["harness", "session-id", "modified", "title"]] + rows)
+    case "tab.transcript":
+        guard let dict = result as? [String: Any] else { return "\(result)" }
+        return (dict["messages"] as? [[String: Any]] ?? []).map { m in
+            "[\(String(str(m["timestamp"]).prefix(16))) \(str(m["role"]))] \(str(m["text"]))"
+        }.joined(separator: "\n\n")
     case "models.list":
         guard let dict = result as? [String: Any] else { return "\(result)" }
         let rows = (dict["models"] as? [[String: Any]] ?? []).map { m in

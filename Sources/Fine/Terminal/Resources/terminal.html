@@ -216,6 +216,23 @@
     term.write(bytes); // 바이트 단위 write — 멀티바이트(UTF-8) 경계는 xterm 디코더가 처리
   };
   window.smPaste = function (text) { term.paste(text); };
+  // CLI(fine read)가 화면을 읽는 창구 — tmux capture-pane에 해당한다.
+  // 스크롤백 포함 버퍼의 마지막 n줄을 평문으로 돌려준다(빈 꼬리 줄은 잘라낸다).
+  window.smReadLines = function (n) {
+    const buf = term.buffer.active;
+    let total = buf.length;
+    while (total > 0 && !buf.getLine(total - 1).translateToString(true).trim()) total--;
+    const start = Math.max(0, total - n);
+    const out = [];
+    for (let i = start; i < total; i++) {
+      const line = buf.getLine(i);
+      const text = line ? line.translateToString(true) : '';
+      if (line && line.isWrapped && out.length) out[out.length - 1] += text;
+      else out.push(text);
+    }
+    while (out.length && out[out.length - 1] === '') { out.pop(); }
+    return out.join('\n');
+  };
   window.smGetSelection = function () { return term.getSelection(); };
   window.smSelectAll = function () { term.selectAll(); };
   window.smFocus = function () { term.focus(); };

@@ -6,17 +6,16 @@ struct HarnessSessionMetadata: Equatable {
     let title: String?
 }
 
-/// Read the harness-owned metadata, never its credentials or message history.
+/// Read harness metadata and, for explicit transcript requests, conversation text.
 /// SQLite connections are short-lived and read-only, with a bounded busy wait.
 struct HarnessSessionStore {
     let codexDatabase: URL
     let openCodeDatabase: URL
 
     static var local: Self {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = FinePaths.home
         let environment = ProcessInfo.processInfo.environment
-        let codexHome = environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
-            ?? home.appendingPathComponent(".codex")
+        let codexHome = FinePaths.codexHome(environment: environment)
         let databases = (try? FileManager.default.contentsOfDirectory(
             at: codexHome, includingPropertiesForKeys: nil
         )) ?? []
@@ -134,6 +133,39 @@ struct HarnessSessionStore {
         let value = title.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard !value.isEmpty, !value.hasPrefix("New session - ") else { return nil }
         return String(value.prefix(120))
+    }
+
+    /// OpenCode 대화 본문. message.data의 role과 part.data의 text 파트를 시간순으로 합친다.
+    /// `fine transcript`용 — 로컬 스토어를 읽기 전용으로 여는 기존 규칙을 그대로 따른다.
+    func openCodeMessages(sessionID: String, limit: Int) -> [HarnessTranscript.Message] {
+        let limit = min(500, max(0, limit))
+        guard limit > 0 else { return [] }
+        let rows = read(openCodeDatabase, query: """
+            SELECT m.id AS message_id, m.data AS message, p.data AS part, m.time_created AS created
+            FROM part p JOIN message m ON m.id = p.message_id
+            WHERE m.id IN (
+                SELECT m2.id FROM message m2
+                WHERE m2.session_id = ? AND json_extract(m2.data, '$.role') IN ('user', 'assistant')
+                AND EXISTS (SELECT 1 FROM part p2 WHERE p2.message_id = m2.id AND json_extract(p2.data, '$.type') = 'text')
+                ORDER BY m2.time_created DESC LIMIT ?
+            ) AND json_extract(p.data, '$.type') = 'text'
+            ORDER BY m.time_created DESC, p.time_created ASC
+            """, arguments: [sessionID, String(limit)]) ?? []
+        var order: [String] = []
+        var messages: [String: HarnessTranscript.Message] = [:]
+        for row in rows {
+            guard let id = row["message_id"],
+                  let message = row["message"].flatMap({ try? JSONSerialization.jsonObject(with: Data($0.utf8)) }) as? [String: Any],
+                  let part = row["part"].flatMap({ try? JSONSerialization.jsonObject(with: Data($0.utf8)) }) as? [String: Any],
+                  let text = part["text"] as? String,
+                  let role = message["role"] as? String,
+                  let created = row["created"].flatMap(Double.init) else { continue }
+            let previous = messages[id]
+            if previous == nil { order.append(id) }
+            messages[id] = .init(role: role, text: previous.map { $0.text + "\n" + text } ?? text,
+                                 timestamp: Date(timeIntervalSince1970: created / 1_000))
+        }
+        return order.reversed().compactMap { messages[$0] }
     }
 
     private func read(_ url: URL, query: String, arguments: [String], maximumRows: Int = .max,

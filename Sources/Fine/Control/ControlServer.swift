@@ -43,6 +43,8 @@ final class ControlServer {
     private let path: String
     private let handler: Handler
     private var listenFD: Int32 = -1
+    private var lockFD: Int32 = -1
+    private var ownsSocket = false
     private let acceptQueue = DispatchQueue(label: "Fine.control.accept", qos: .utility)
 
     init(path: String, handler: @escaping Handler) {
@@ -53,7 +55,16 @@ final class ControlServer {
     func start() throws {
         let dir = (path as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        unlink(path)   // 이전 프로세스가 남긴 stale 소켓
+        // A second instance must not unlink the running app's socket. HOME alone
+        // does not isolate Foundation paths on macOS (Fine bridge E2E incident).
+        let lock = open(path + ".lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        guard lock >= 0 else { throw ControlError.system("socket lock", errno) }
+        guard flock(lock, LOCK_EX | LOCK_NB) == 0 else {
+            close(lock); throw ControlError.system("another Fine owns this socket", EADDRINUSE)
+        }
+        lockFD = lock
+        var started = false
+        defer { if !started { stop() } }
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw ControlError.system("socket", errno) }
         var addr = sockaddr_un()
@@ -65,21 +76,39 @@ final class ControlServer {
         withUnsafeMutableBytes(of: &addr.sun_path) { raw in
             raw.copyBytes(from: pathBytes.map { UInt8(bitPattern: $0) })
         }
+        let active = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) == 0
+            }
+        }
+        guard !active else {
+            close(fd); throw ControlError.system("another Fine is listening", EADDRINUSE)
+        }
+        var existing = stat()
+        if lstat(path, &existing) == 0 {
+            guard existing.st_mode & mode_t(S_IFMT) == mode_t(S_IFSOCK) else {
+                close(fd); throw ControlError.system("socket path is not a socket", EEXIST)
+            }
+            unlink(path)
+        }
         let bound = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
         guard bound == 0 else { let e = errno; close(fd); throw ControlError.system("bind", e) }
+        ownsSocket = true
         chmod(path, 0o600)   // 같은 사용자만
         guard listen(fd, 16) == 0 else { let e = errno; close(fd); throw ControlError.system("listen", e) }
         listenFD = fd
         acceptQueue.async { [weak self] in self?.acceptLoop(fd) }
+        started = true
     }
 
     func stop() {
         if listenFD >= 0 { close(listenFD); listenFD = -1 }
-        unlink(path)
+        if ownsSocket { unlink(path); ownsSocket = false }
+        if lockFD >= 0 { close(lockFD); lockFD = -1 }
     }
 
     private func acceptLoop(_ fd: Int32) {
@@ -89,6 +118,8 @@ final class ControlServer {
                 if errno == EINTR { continue }
                 return
             }
+            var enabled: Int32 = 1
+            setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size))
             DispatchQueue.global(qos: .utility).async { [weak self] in self?.serve(client) }
         }
     }

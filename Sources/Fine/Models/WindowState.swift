@@ -42,7 +42,7 @@ final class WindowStateStorage {
         stateFile: URL? = nil
     ) {
         self.fileManager = fileManager
-        let directory = fileManager.homeDirectoryForCurrentUser
+        let directory = FinePaths.home
             .appendingPathComponent(".fine", isDirectory: true)
         self.stateFile = stateFile ?? directory.appendingPathComponent("window-states.json")
         try? fileManager.createDirectory(at: self.stateFile.deletingLastPathComponent(), withIntermediateDirectories: true)

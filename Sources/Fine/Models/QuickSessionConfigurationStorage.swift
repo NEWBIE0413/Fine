@@ -9,7 +9,7 @@ final class QuickSessionConfigurationStorage {
 
     init(fileManager: FileManager = .default, stateFile: URL? = nil) {
         self.fileManager = fileManager
-        let directory = fileManager.homeDirectoryForCurrentUser
+        let directory = FinePaths.home
             .appendingPathComponent(".fine", isDirectory: true)
         self.stateFile = stateFile
             ?? directory.appendingPathComponent("quick-session-configurations.json")

@@ -5,7 +5,7 @@ import Foundation
 /// 새 UI 기능을 추가하면 같은 커밋에서 명령도 추가한다.
 @MainActor
 enum ControlCommands {
-    nonisolated static let socketPath = (NSHomeDirectory() as NSString).appendingPathComponent(".fine/control.sock")
+    nonisolated static let socketPath = FinePaths.home.appendingPathComponent(".fine/control.sock").path
 
     static func handle(_ request: ControlRequest, completion: @escaping (ControlResponse) -> Void) {
         do {
@@ -56,6 +56,10 @@ enum ControlCommands {
                 entry.state.sessions.enumerated().map { describe($0.element, index: $0.offset, in: entry, windowIndex: windowIndex) }
             }
 
+        case "tab.info":
+            let (entry, windowIndex, session, tabIndex) = try tab(r)
+            return describe(session, index: tabIndex, in: entry, windowIndex: windowIndex)
+
         case "tab.select":
             let (entry, windowIndex, session, _) = try tab(r)
             entry.state.selectSession(session)
@@ -105,6 +109,25 @@ enum ControlCommands {
             if r.bool("focus") ?? true { focus(entry) }
             return describe(replacement, index: index(of: replacement, in: entry), in: entry, windowIndex: windowIndex)
 
+        case "tab.write":
+            let (entry, windowIndex, session, tabIndex) = try tab(r)
+            guard let text = r.string("text") else { throw fail("text required") }
+            try requireFingerprint(r, session)
+            guard session.write(Data(text.utf8)) else { throw fail("tab process is not running") }
+            return describe(session, index: tabIndex, in: entry, windowIndex: windowIndex)
+
+        case "tab.keys":
+            let (entry, windowIndex, session, tabIndex) = try tab(r)
+            guard let names = r.args["keys"] as? [String], !names.isEmpty else { throw fail("keys required") }
+            var payload = Data()
+            for name in names {
+                guard let bytes = ControlKeys.bytes(for: name) else { throw fail("unknown key: \(name)") }
+                payload.append(bytes)
+            }
+            try requireFingerprint(r, session)
+            guard session.write(payload) else { throw fail("tab process is not running") }
+            return describe(session, index: tabIndex, in: entry, windowIndex: windowIndex)
+
         case "home":
             let (entry, index) = try window(r)
             entry.state.showHome()
@@ -115,7 +138,7 @@ enum ControlCommands {
             let data = try JSONEncoder.pretty.encode(WindowStateStorage.shared.states)
             return try JSONSerialization.jsonObject(with: data)
 
-        case "conversations.list", "models.list", "session.new", "session.resume", "window.new":
+        case "conversations.list", "models.list", "session.new", "session.resume", "window.new", "tab.read", "tab.transcript":
             throw fail("internal: async command reached sync dispatcher")
         default:
             throw fail("unknown command: \(r.command)")
@@ -131,6 +154,29 @@ enum ControlCommands {
         case "window.new":
             openWindow { entry in
                 completion(entry.map { .ok(describe($0, index: liveWindows().count - 1)) } ?? .error("window did not appear"))
+            }
+            return true
+
+        case "tab.read":
+            let (_, _, session, _) = try tab(r)
+            guard session.hasTerminal else { throw fail("tab has no terminal yet (not started)") }
+            session.readScreen(lines: r.int("lines") ?? 50) { text in
+                completion(text.map { .ok(["text": $0]) } ?? .error("terminal not ready"))
+            }
+            return true
+
+        case "tab.transcript":
+            let (_, _, session, _) = try tab(r)
+            guard let sessionID = session.resumableSessionID else {
+                throw fail("tab has no conversation id yet — the harness has not written a session")
+            }
+            let harness = session.configuration.harness
+            let limit = min(500, max(1, r.int("limit") ?? 20))
+            DispatchQueue.global(qos: .utility).async {
+                guard let messages = HarnessTranscript.messages(harness: harness, sessionID: sessionID, limit: limit) else {
+                    completion(.error("transcript not found for \(harness.rawValue) session \(sessionID)")); return
+                }
+                completion(.ok(["harness": harness.rawValue, "sessionId": sessionID, "messages": messages.map(\.json)] as [String: Any]))
             }
             return true
 
@@ -301,6 +347,12 @@ enum ControlCommands {
         throw fail("tab not found: \(query)")
     }
 
+    private static func requireFingerprint(_ request: ControlRequest, _ session: TerminalSession) throws {
+        if let expected = request.string("fingerprint"), expected != session.controlFingerprint {
+            throw fail("tab process was replaced since read; read it again")
+        }
+    }
+
     private static func index(of session: TerminalSession, in entry: WindowEntry) -> Int {
         entry.state.sessions.firstIndex(of: session) ?? -1
     }
@@ -337,6 +389,7 @@ enum ControlCommands {
             "proxy": s.configuration.proxyEnabled,
             "sessionId": s.resumableSessionID ?? "",
             "running": s.isRunning,
+            "fingerprint": s.controlFingerprint,
             "selected": entry.state.selectedSession?.id == s.id,
             "window": entry.state.windowStateID.uuidString,
             "windowIndex": windowIndex,

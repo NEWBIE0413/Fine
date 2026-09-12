@@ -4,6 +4,7 @@ import Foundation
 /// One ephemeral agent conversation backed by a direct PTY and xterm.js view.
 final class TerminalSession: Identifiable, ObservableObject, Equatable {
     let id: UUID
+    private(set) var controlFingerprint = UUID().uuidString
     @Published var name: String
     @Published var isRunning = false
     @Published var startError: String?
@@ -115,6 +116,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     }
 
     private func startPTY() {
+        controlFingerprint = UUID().uuidString
         identityStartedAt = Date()
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let executableName = "-" + (shell as NSString).lastPathComponent
@@ -128,6 +130,11 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
+        // 탭 안의 에이전트가 자기 주소를 알 수 있게 — tmux의 TMUX_PANE에 해당. `fine id`가 읽는다.
+        environment["FINE_TAB_ID"] = id.uuidString.lowercased()
+        if environment["FINE_HOME"] != nil { environment["HOME"] = FinePaths.home.path }
+        environment.removeValue(forKey: "TMUX")
+        environment.removeValue(forKey: "TMUX_PANE")
         environment = QuickSessionPolicy.applyingEnvironment(
             environment,
             launch: effectiveLaunch,
@@ -292,6 +299,21 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         pty = nil
         started = false
         terminalView?.reloadPage()
+    }
+
+    /// CLI 입력 경로 — 사용자가 키보드로 친 것과 같은 바이트가 PTY로 들어간다.
+    @discardableResult
+    func write(_ data: Data) -> Bool {
+        guard let pty, pty.isRunning else { return false }
+        pty.write(data)
+        return true
+    }
+
+    var hasTerminal: Bool { terminalView != nil }
+
+    func readScreen(lines: Int, completion: @escaping (String?) -> Void) {
+        guard let terminalView else { completion(nil); return }
+        terminalView.readScreen(lines: lines, completion: completion)
     }
 
     func focusTerminal() {

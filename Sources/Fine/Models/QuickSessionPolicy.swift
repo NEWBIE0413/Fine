@@ -20,7 +20,7 @@ enum QuickSessionPolicy {
     }
 
     static var ccvExecutablePath: String {
-        FileManager.default.homeDirectoryForCurrentUser
+        FinePaths.home
             .appendingPathComponent("myworld/ccv", isDirectory: false)
             .path
     }
@@ -29,7 +29,7 @@ enum QuickSessionPolicy {
     /// standalone installer's binary ahead of Homebrew's. Mirror that order so a
     /// Fine session never runs an older Homebrew build than the terminal does.
     static var opencodeExecutablePath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = FinePaths.home
         let candidates = [
             home.appendingPathComponent(".opencode/bin/opencode").path,
             "/opt/homebrew/bin/opencode",
@@ -46,7 +46,7 @@ enum QuickSessionPolicy {
     }
 
     static var workingDirectory: String {
-        FileManager.default.homeDirectoryForCurrentUser
+        FinePaths.home
             .appendingPathComponent("cld", isDirectory: true)
             .path
     }
@@ -193,7 +193,7 @@ enum QuickSessionPolicy {
         configuration: QuickSessionConfiguration
     ) -> [String: String] {
         var result = base
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = FinePaths.home.path
         let requiredPaths = [home + "/.local/bin", "/opt/homebrew/bin", home + "/.opencode/bin"]
         let inheritedPaths = (result["PATH"] ?? "")
             .split(separator: ":")

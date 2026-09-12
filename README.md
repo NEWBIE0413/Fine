@@ -220,3 +220,18 @@ or router.
 
 MIT. See [LICENSE](LICENSE). Bundled terminal components are documented in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+
+## Native terminal messaging
+
+`fine read <tab> 20`, `fine send <tab> 'text'`, `fine msg <tab> 'message'`, and `fine keys <tab> Enter` use the shared smux protocol. Read before each send/key action; successful actions consume the read. Use `fine trust <target>` for a user-authorized conversation across windows, tmux, or hosts. The receiver can reply through an automatically recorded reverse grant.
+
+Targets are Fine tab names/IDs, `%pane`, `tmux:label`, `arch:label`, or `mac:fine:<UUID>`. `fine resolve` returns a canonical address. `fine id` uses the `FINE_TAB_ID` exported to each tab's PTY. `tmux-bridge` accepts `fine:<UUID>` directly and `list -a` includes Fine tabs. Host routing uses the existing SSH/NUC relay; Mac Remote Login is unnecessary in relay mode.
+
+`fine transcript <tab> -n 20` reads structured Claude, Codex, or OpenCode conversation text. It is separate from the current terminal screen and does not satisfy the read guard. Tabs retain their UUID across restoration, while a new PTY gets a new fingerprint so old guards and trust expire.
+
+### Isolated integration tests
+
+`FINE_HOME=/absolute/test/root` relocates app data and default harness paths. Set `CODEX_HOME`/`XDG_DATA_HOME` as well when overriding their explicit locations. A shell HOME override alone does not isolate Foundation paths on macOS. The control server refuses to replace an active socket; test instances must use their own root.
+
+After `swift build`, run `python3 scripts/test-bridge-e2e.py` to launch a separate native app with a harmless harness stub and isolated tmux server. It checks screen capture, PTY identity, both message directions, guard consumption, and preservation of the live app socket. Agent instructions are in `skills/fine/SKILL.md`.

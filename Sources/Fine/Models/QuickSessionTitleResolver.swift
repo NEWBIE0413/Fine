@@ -11,7 +11,7 @@ enum QuickSessionTitleResolver {
     }
 
     static var sessionsDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        FinePaths.home
             .appendingPathComponent(".claude/sessions", isDirectory: true)
     }
 

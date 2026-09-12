@@ -208,6 +208,14 @@ final class TerminalWebView: NSView {
 
     // MARK: - 포커스/테마
 
+    /// 버퍼의 마지막 `lines`줄. 페이지가 아직 준비되지 않았으면 nil.
+    func readScreen(lines: Int, completion: @escaping (String?) -> Void) {
+        guard isReady else { completion(nil); return }
+        webView.evaluateJavaScript("window.smReadLines(\(max(1, lines)))") { result, _ in
+            completion(result as? String)
+        }
+    }
+
     func focusTerminal() {
         window?.makeFirstResponder(webView)
         webView.evaluateJavaScript("window.smFocus()", completionHandler: nil)
