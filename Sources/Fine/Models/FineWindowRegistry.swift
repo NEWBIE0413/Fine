@@ -63,6 +63,13 @@ final class FineWindowRegistry {
         }
     }
 
+    /// CLI 라우터가 창을 열거하는 창구. 등록 순서(= 창이 열린 순서)를 그대로 돌려주므로
+    /// `fine windows`의 인덱스가 실행 중 안정적이다.
+    func liveEntries() -> [(state: AppState, window: NSWindow?)] {
+        removeDeadEntries()
+        return entries.compactMap { entry in entry.state.map { ($0, entry.window) } }
+    }
+
     private func removeDeadEntries() {
         entries.removeAll { $0.state == nil }
     }

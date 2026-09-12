@@ -112,9 +112,11 @@ flowchart LR
 
 ```text
 Sources/Fine/
+├── Control/      UNIX-socket control server and the `fine` command router
 ├── Models/       session policy, transcript scanning, window state
 ├── Terminal/     PTY lifecycle, xterm bridge, palette and web resources
 └── Views/        sidebar, composer, terminal workspace and window binding
+Sources/FineCLI/  the `fine` command-line client
 ```
 
 ## Requirements
@@ -145,6 +147,52 @@ The packaging script builds and ad-hoc signs `.build/Fine.app`.
 ditto .build/Fine.app /Applications/Fine.app
 open /Applications/Fine.app
 ```
+
+## Command line: `fine`
+
+Everything the app can do is also available from the terminal. Fine opens a
+line-delimited JSON control socket at `~/.fine/control.sock` on launch, and the
+`fine` CLI talks to it. If the app is not running, the CLI launches it in the
+background and waits for the socket (up to 15 seconds).
+
+```sh
+swift build -c release
+cp .build/release/fine-cli ~/bin/fine   # the build product is fine-cli: on a
+                                        # case-insensitive disk `fine` would
+                                        # collide with the app binary `Fine`
+```
+
+```text
+fine windows                              창 목록
+fine window new | focus <win> | close <win>
+
+fine list [--harness claude|codex|opencode] [-n N]
+fine new [--harness H] [--model M] [--effort E] [--proxy] [prompt…]
+fine resume <session-id> [--harness H]
+fine restart <tab> [--model M] [--effort E]
+
+fine tabs
+fine tab select|close <tab>
+fine tab next|prev
+fine tab move <tab> <index|+1|-1>
+fine home
+
+fine models [--harness H]
+fine state                                ~/.fine/window-states.json 덤프
+fine ping
+```
+
+Options: `--json` prints the raw response, `-w/--window <index|id-prefix|front>`
+picks the window, `--no-focus` leaves the app in the background. `<win>` is an
+index, an id prefix, or `front`; `<tab>` is an index, a tab name, a session id,
+or an id prefix. Values you do not pass to `fine new` come from the composer's
+current defaults; `--model default` means "기본 (터미널과 동일)".
+
+The socket protocol is one request per connection:
+`{"command":"tab.select","args":{"tab":"2"}}\n` →
+`{"ok":true,"result":{…}}\n` or `{"ok":false,"error":"…"}\n`. Any language can
+drive it. The app-side router lives in `Sources/Fine/Control/`; when a UI
+feature is added, its command is added in the same commit.
 
 ## Keyboard shortcuts
 

@@ -6,9 +6,25 @@ enum AppTermination {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var controlServer: ControlServer?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        startControlServer()
+    }
+
+    /// `fine` CLI용 제어 소켓. 실패해도 앱은 정상 동작한다 — CLI만 쓸 수 없게 된다.
+    private func startControlServer() {
+        let server = ControlServer(path: ControlCommands.socketPath) { request, completion in
+            MainActor.assumeIsolated { ControlCommands.handle(request, completion: completion) }
+        }
+        do {
+            try server.start()
+            controlServer = server
+        } catch {
+            NSLog("Fine control server failed to start: \(error)")
+        }
     }
 
     func applicationShouldHandleReopen(
@@ -21,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        controlServer?.stop()
         FineWindowRegistry.shared.persistWindowPresentations()
         AppTermination.isTerminating = true
         // 자식 정리를 여기서 동기적으로 끝낸다. .terminateNow 이후에는 비동기 승격이

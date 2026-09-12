@@ -46,6 +46,7 @@ struct ContentView: View {
                 sceneWindowStateID = appState.windowStateID
             }
             QuickConversationScanner.shared.start()
+            WindowOpener.register(openWindow)
             WindowRestorer.openRemainingWindowsIfNeeded(openWindow)
         }
     }
