@@ -180,6 +180,8 @@ struct QuickHomeView: View {
             return "Codex 모델 선택 · 라우터 없이 직접 실행"
         case .opencode:
             return "OpenCode 모델 선택 — opencode.json에 허용한 모델만 보입니다"
+        case .omp:
+            return "omp의 default 역할 모델을 고릅니다 — smol·slow·plan은 config.yml을 따릅니다"
         case .claude:
             return modelCatalog.routerAvailable
                 ? "대화 모델 선택"
@@ -263,6 +265,10 @@ struct QuickHomeView: View {
             return selectedModel.isDefault
                 ? "OpenCode 기본 모델로 시작합니다"
                 : "OpenCode에서 선택한 모델로 시작합니다"
+        case .omp:
+            return selectedModel.isDefault
+                ? "omp 설정의 역할 모델 그대로 시작합니다"
+                : "default 역할만 바꿔 시작합니다 · smol·slow·plan은 그대로"
         case .claude:
             if selectedModel.isDefault { return "Claude 기본 모델로 시작합니다" }
             if selectedModel.isAuto { return "질문 난이도를 보고 모델과 깊이를 골라 시작합니다" }

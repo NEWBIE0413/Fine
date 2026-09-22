@@ -58,3 +58,34 @@ final class DarkHomeRenderTests: XCTestCase {
         }
     }
 }
+
+extension DarkHomeRenderTests {
+    /// 외형 설정이 실제로 NSApp까지 도달하는지 — 화면을 보지 않고 확인한다.
+    @MainActor
+    func testAppearanceReachesTheApplication() {
+        let original = NSApplication.shared.appearance
+        defer { NSApplication.shared.appearance = original }
+
+        FineAppearance.apply(.dark)
+        XCTAssertEqual(NSApplication.shared.appearance?.name, .darkAqua)
+
+        FineAppearance.apply(.light)
+        XCTAssertEqual(NSApplication.shared.appearance?.name, .aqua)
+
+        FineAppearance.apply(.system)
+        XCTAssertNil(NSApplication.shared.appearance, "시스템은 앱 외형을 비워 OS를 따라야 한다")
+    }
+
+    /// 저장된 값 읽기가 기동 경로와 같은 키를 쓰는지.
+    @MainActor
+    func testStoredAppearanceRoundtrips() {
+        let defaults = UserDefaults.standard
+        let original = defaults.string(forKey: FineAppearance.storageKey)
+        defer {
+            if let original { defaults.set(original, forKey: FineAppearance.storageKey) }
+            else { defaults.removeObject(forKey: FineAppearance.storageKey) }
+        }
+        defaults.set(FineAppearance.dark.rawValue, forKey: FineAppearance.storageKey)
+        XCTAssertEqual(FineAppearance.stored, .dark)
+    }
+}

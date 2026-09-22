@@ -16,6 +16,7 @@ enum QuickSessionPolicy {
         case .claude: return initialSessionName
         case .codex: return "Codex 세션"
         case .opencode: return "OpenCode 세션"
+        case .omp: return "OMP 세션"
         }
     }
 
@@ -35,6 +36,16 @@ enum QuickSessionPolicy {
             "/opt/homebrew/bin/opencode",
         ]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "opencode"
+    }
+
+    /// 터미널이 PATH에서 찾는 순서를 그대로 따른다.
+    static var ompExecutablePath: String {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let candidates = [
+            home.appendingPathComponent(".bun/bin/omp").path,
+            "/opt/homebrew/bin/omp",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "omp"
     }
 
     static var codexExecutablePath: String {
@@ -82,6 +93,8 @@ enum QuickSessionPolicy {
             return codexLaunchCommand(for: launch, configuration: configuration)
         case .opencode:
             return opencodeLaunchCommand(for: launch, configuration: configuration)
+        case .omp:
+            return ompLaunchCommand(for: launch, configuration: configuration)
         }
     }
 
@@ -135,6 +148,35 @@ enum QuickSessionPolicy {
         return parts.joined(separator: " ")
     }
 
+    /// omp는 모델이 세션당 하나가 아니라 역할 슬롯(default/smol/slow/plan)이다.
+    /// `--model`은 그중 default만 덮으므로, 나머지는 `~/.omp/agent/config.yml`이 그대로 결정한다.
+    /// 하네스 UI에서 모델 하나를 고르는 것이 이 구조를 무너뜨리지 않는 이유다.
+    ///
+    /// 토큰은 공유하지 않는다: omp는 Codex OAuth를 자기 `agent.db`에 별도 체인으로 들고 있고,
+    /// `~/.codex/auth.json`과 리프레시 토큰이 다르다. Fine은 PTY만 띄우고 인증에 손대지 않는다.
+    private static func ompLaunchCommand(
+        for launch: QuickLaunch,
+        configuration: QuickSessionConfiguration
+    ) -> String {
+        var parts = [#"exec "$FINE_OMP" --auto-approve"#]
+        if !configuration.isDefaultModel {
+            parts.append(#"--model "$FINE_MODEL" --thinking="$FINE_EFFORT""#)
+        }
+        switch launch {
+        case .blank, .initialPrompt:
+            break
+        case .resume:
+            parts.append(#"-r "$FINE_RESUME_SESSION_ID""#)
+        case .resumeLatest:
+            parts.append("-c")
+        }
+        // 메시지는 위치 인자다. 플래그를 모두 붙인 뒤에 온다.
+        if case .initialPrompt = launch {
+            parts.append(#""$FINE_INITIAL_PROMPT""#)
+        }
+        return parts.joined(separator: " ")
+    }
+
     private static func opencodeLaunchCommand(
         for launch: QuickLaunch,
         configuration: QuickSessionConfiguration
@@ -164,6 +206,7 @@ enum QuickSessionPolicy {
             "FINE_CCV": ccvExecutablePath.replacingOccurrences(of: "\0", with: ""),
             "FINE_CODEX": codexExecutablePath.replacingOccurrences(of: "\0", with: ""),
             "FINE_OPENCODE": opencodeExecutablePath.replacingOccurrences(of: "\0", with: ""),
+            "FINE_OMP": ompExecutablePath.replacingOccurrences(of: "\0", with: ""),
             "FINE_MODEL": configuration.modelID.replacingOccurrences(of: "\0", with: ""),
             "FINE_EFFORT": configuration.effort.rawValue,
         ]
@@ -194,7 +237,10 @@ enum QuickSessionPolicy {
     ) -> [String: String] {
         var result = base
         let home = FinePaths.home.path
-        let requiredPaths = [home + "/.local/bin", "/opt/homebrew/bin", home + "/.opencode/bin"]
+        let requiredPaths = [
+            home + "/.local/bin", "/opt/homebrew/bin",
+            home + "/.opencode/bin", home + "/.bun/bin",
+        ]
         let inheritedPaths = (result["PATH"] ?? "")
             .split(separator: ":")
             .map(String.init)

@@ -10,6 +10,7 @@ struct QuickSidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
             Button {
                 appState.showHome()
             } label: {
@@ -32,10 +33,13 @@ struct QuickSidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, FineTheme.sidebarInset)
-            .padding(.top, FineTheme.titlebarClearance)
             .onHover { isHoveringNew = $0 }
             .animation(.easeOut(duration: 0.14), value: isHoveringNew)
+
+                AppearanceToggle()
+            }
+            .padding(.horizontal, FineTheme.sidebarInset)
+            .padding(.top, FineTheme.titlebarClearance)
 
             if !appState.sessions.isEmpty {
                 QuickSectionHeader(title: "열린 대화") {
@@ -188,14 +192,6 @@ struct QuickSidebarView: View {
                 }
             }
 
-            Spacer(minLength: 8)
-
-            HStack {
-                AppearancePicker()
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, FineTheme.sidebarInset)
-            .padding(.bottom, 12)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }

@@ -36,6 +36,9 @@ struct ContentView: View {
         .background(Color.clear)
         // 외형은 앱 전체에 한 번만 건다. 창 배경과 사이드바 재질이 같이 따라와야 한다.
         .preferredColorScheme((FineAppearance(rawValue: appearance) ?? .system).colorScheme)
+        .onChange(of: appearance) { _, value in
+            FineAppearance.apply(FineAppearance(rawValue: value) ?? .system)
+        }
         .ignoresSafeArea(.container, edges: .top)
         .background {
             WindowBindingView(appState: appState, title: appState.windowTitle)

@@ -31,6 +31,10 @@ enum HarnessTranscript {
             return Array(parseCodex(data).suffix(limit))
         case .opencode:
             return store.openCodeMessages(sessionID: sessionID, limit: limit)
+        case .omp:
+            // omp의 jsonl 스키마를 아직 확인하지 못했다. 추측해서 파싱하면
+            // 조용히 틀린 대화 기록을 보여주게 되므로, 확인 전까지 없다고 답한다.
+            return nil
         }
     }
 

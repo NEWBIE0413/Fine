@@ -2,6 +2,10 @@ import XCTest
 @testable import Fine
 
 final class SessionReorderingTests: XCTestCase {
+    /// 이 테스트가 보는 것은 재정렬이지 하네스 개수가 아니다.
+    /// allCases를 쓰면 하네스를 하나 더할 때마다 관계없는 기대값이 깨진다.
+    static let reorderingHarnesses: [QuickHarness] = [.claude, .codex, .opencode]
+
     @MainActor
     func testMovesBothDirectionsPreservingInstancesSelectionAndSavedOrder() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -10,7 +14,7 @@ final class SessionReorderingTests: XCTestCase {
         let storage = WindowStateStorage(stateFile: stateFile)
         let configurations = QuickSessionConfigurationStorage(stateFile: directory.appendingPathComponent("config.json"))
         let windowID = UUID()
-        let snapshots = QuickHarness.allCases.map {
+        let snapshots = Self.reorderingHarnesses.map {
             QuickSessionSnapshot(id: UUID(), name: $0.title, conversationID: nil,
                                  configuration: .defaultConfiguration(for: $0))
         }
@@ -55,7 +59,7 @@ final class SessionReorderingTests: XCTestCase {
             let storage = WindowStateStorage(stateFile: stateFile)
             let configurations = QuickSessionConfigurationStorage(stateFile: directory.appendingPathComponent("config.json"))
             let windowID = UUID()
-            let snapshots = QuickHarness.allCases.map {
+            let snapshots = Self.reorderingHarnesses.map {
                 QuickSessionSnapshot(id: UUID(), name: $0.title, conversationID: nil,
                                      configuration: .defaultConfiguration(for: $0))
             }

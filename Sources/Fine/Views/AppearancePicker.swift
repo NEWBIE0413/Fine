@@ -1,6 +1,7 @@
 import SwiftUI
+import AppKit
 
-/// 앱이 따를 외형. 시스템을 따르거나, 명시적으로 고정한다.
+/// 앱이 따를 외형.
 enum FineAppearance: String, CaseIterable, Identifiable {
     case system, light, dark
 
@@ -8,17 +9,9 @@ enum FineAppearance: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system: "시스템"
+        case .system: "시스템 설정"
         case .light: "밝게"
         case .dark: "어둡게"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .system: "circle.lefthalf.filled"
-        case .light: "sun.max"
-        case .dark: "moon.stars"
         }
     }
 
@@ -30,52 +23,67 @@ enum FineAppearance: String, CaseIterable, Identifiable {
         case .dark: .dark
         }
     }
+
+    /// SwiftUI의 preferredColorScheme만으로는 AppKit이 그리는 창 테두리와 재질까지
+    /// 따라오지 않는다. 앱 외형을 직접 지정해야 전체가 한 번에 바뀐다.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+
+    static var stored: FineAppearance {
+        FineAppearance(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .system
+    }
+
+    static let storageKey = "fineAppearance"
+
+    /// 실행 직후와 값이 바뀔 때마다 호출한다.
+    @MainActor
+    static func apply(_ appearance: FineAppearance) {
+        NSApplication.shared.appearance = appearance.nsAppearance
+    }
 }
 
-/// 사이드바 바닥에 앉는 작은 전환기. 아이콘만 두고 현재 값만 띄운다 —
-/// 자주 만지는 설정이 아니므로 글자로 세 칸을 채울 이유가 없다.
-struct AppearancePicker: View {
-    @AppStorage("fineAppearance") private var stored = FineAppearance.system.rawValue
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+/// "새 대화" 줄 오른쪽에 앉는 토글. 지금 무엇인지가 아니라 누르면 무엇이 되는지를 보여준다 —
+/// 상태가 이미 화면 전체로 드러나 있으므로 아이콘까지 그것을 되풀이할 이유가 없다.
+struct AppearanceToggle: View {
+    @AppStorage(FineAppearance.storageKey) private var stored = FineAppearance.system.rawValue
     @Environment(\.colorScheme) private var colorScheme
-    @Namespace private var highlight
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
 
-    private var selection: FineAppearance {
-        FineAppearance(rawValue: stored) ?? .system
+    private var isDark: Bool {
+        switch FineAppearance(rawValue: stored) ?? .system {
+        case .dark: true
+        case .light: false
+        case .system: colorScheme == .dark
+        }
     }
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(FineAppearance.allCases) { appearance in
-                let isSelected = selection == appearance
-                Button { stored = appearance.rawValue } label: {
-                    Image(systemName: appearance.symbol)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(isSelected ? .primary : .secondary)
-                        .frame(width: 30, height: 22)
-                        .background {
-                            if isSelected {
-                                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .fill(.white.opacity(colorScheme == .dark ? 0.16 : 0.94))
-                                    .matchedGeometryEffect(id: "appearance", in: highlight)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.finePress)
-                .help(appearance.title)
-                .accessibilityLabel(appearance.title)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-            }
+        Button {
+            let next: FineAppearance = isDark ? .light : .dark
+            stored = next.rawValue
+            FineAppearance.apply(next)
+        } label: {
+            Image(systemName: isDark ? "sun.max" : "moon.stars")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isHovering ? FineTheme.hoverFill : .clear)
+                )
+                .contentShape(Rectangle())
+                .contentTransition(.symbolEffect(.replace))
         }
-        .padding(2)
-        .background(
-            FinePalette.resolve(colorScheme).controlFill,
-            in: RoundedRectangle(cornerRadius: FineTheme.compactControlRadius)
-        )
-        .fixedSize()
-        .animation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 1), value: selection)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("외형")
+        .buttonStyle(.finePress)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+        .help(isDark ? "밝게" : "어둡게")
+        .accessibilityLabel(isDark ? "밝게 전환" : "어둡게 전환")
     }
 }

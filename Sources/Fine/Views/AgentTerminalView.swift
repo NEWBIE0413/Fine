@@ -126,6 +126,7 @@ private struct SessionModelPickerView: View {
         case .claude: return "같은 대화를 선택한 모델로 다시 시작합니다."
         case .codex: return "Codex 기본 설정으로 같은 대화를 다시 시작합니다."
         case .opencode: return "OpenCode 세션은 터미널처럼 /models 명령으로 전환합니다."
+        case .omp: return "같은 대화를 선택한 모델로 다시 시작합니다. 나머지 역할 모델은 omp 설정을 따릅니다."
         }
     }
 
@@ -134,6 +135,7 @@ private struct SessionModelPickerView: View {
         case .claude: return "Claude가 세션 ID를 만들기 전에는 재시작할 수 없습니다"
         case .codex: return "Codex가 세션 ID를 만들기 전에는 재시작할 수 없습니다"
         case .opencode: return "OpenCode 세션은 앱에서 재시작하지 않습니다"
+        case .omp: return "omp가 세션 ID를 만들기 전에는 재시작할 수 없습니다"
         }
     }
 }

@@ -24,6 +24,7 @@ enum QuickModelProvider: String, CaseIterable, Identifiable {
     case openRouterFree
     case nvidiaFree
     case opencode
+    case omp
 
     var id: String { rawValue }
 
@@ -38,6 +39,7 @@ enum QuickModelProvider: String, CaseIterable, Identifiable {
         case .openRouterFree: "OpenRouter"
         case .nvidiaFree: "NVIDIA"
         case .opencode: "OpenCode"
+        case .omp: "OMP"
         }
     }
 
@@ -53,6 +55,7 @@ extension QuickModelOption {
     var provider: QuickModelProvider {
         if harness == .codex { return .codex }
         if harness == .opencode { return .opencode }
+        if harness == .omp { return .omp }
         if isCodex { return .codex }
         if isKimi { return .kimi }
         if isGemini { return .gemini }

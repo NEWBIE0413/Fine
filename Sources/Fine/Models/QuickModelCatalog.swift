@@ -7,6 +7,7 @@ enum QuickHarness: String, CaseIterable, Identifiable, Codable, Sendable {
     case claude
     case codex
     case opencode
+    case omp
 
     var id: String { rawValue }
 
@@ -15,11 +16,13 @@ enum QuickHarness: String, CaseIterable, Identifiable, Codable, Sendable {
         case .claude: return "Claude"
         case .codex: return "Codex"
         case .opencode: return "OpenCode"
+        case .omp: return "OMP"
         }
     }
 }
 
 enum QuickEffort: String, CaseIterable, Identifiable, Codable, Sendable {
+    case minimal
     case low
     case medium
     case high
@@ -31,6 +34,7 @@ enum QuickEffort: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var displayName: String {
         switch self {
+        case .minimal: return "최소"
         case .low: return "낮음"
         case .medium: return "중간"
         case .high: return "높음"
@@ -367,8 +371,23 @@ final class QuickModelCatalog: ObservableObject {
                 self?.models = [.defaultOption(for: .codex)] + discovered
                 self?.isLoading = false
             }
+        case .omp:
+            refreshOmp()
         case .opencode:
             refreshOpenCode()
+        }
+    }
+
+    private func refreshOmp() {
+        models = [.defaultOption(for: .omp)]
+        routerAvailable = false
+        refreshTask = Task { [weak self] in
+            let discovered = await Task.detached(priority: .utility) {
+                OmpModelDiscovery.discover()
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.models = [.defaultOption(for: .omp)] + discovered
+            self?.isLoading = false
         }
     }
 

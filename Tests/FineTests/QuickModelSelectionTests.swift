@@ -325,3 +325,83 @@ final class QuickModelSelectionTests: XCTestCase {
         })
     }
 }
+
+final class OmpModelDiscoveryTests: XCTestCase {
+    private let sample = """
+    alibaba-token-plan (3)
+    ┌────────────────────────┬─────────┬─────────┬─────────────────────────────┬────────┐
+    │ model                  │ context │ max-out │ thinking                    │ images │
+    ├────────────────────────┼─────────┼─────────┼─────────────────────────────┼────────┤
+    │ auto                   │       - │       - │ -                           │ no     │
+    │ glm-5.2                │      1M │    131K │ minimal,low,medium,high,max │ no     │
+    │ glm-5.3                │       - │       - │ -                           │ no     │
+    └────────────────────────┴─────────┴─────────┴─────────────────────────────┴────────┘
+
+    openai-codex (2)
+    ┌───────────────┬─────────┬─────────┬───────────────────────────┬────────┐
+    │ model         │ context │ max-out │ thinking                  │ images │
+    ├───────────────┼─────────┼─────────┼───────────────────────────┼────────┤
+    │ gpt-5.6-sol   │    272K │    128K │ low,medium,high,xhigh,max │ yes    │
+    │ gpt-5.5       │    272K │    128K │ low,medium,high,xhigh     │ yes    │
+    └───────────────┴─────────┴─────────┴───────────────────────────┴────────┘
+    """
+
+    func testParsesProviderQualifiedModels() {
+        let models = OmpModelDiscovery.parse(sample)
+        XCTAssertEqual(
+            models.map(\.id),
+            ["alibaba-token-plan/glm-5.2", "alibaba-token-plan/glm-5.3",
+             "openai-codex/gpt-5.6-sol", "openai-codex/gpt-5.5"]
+        )
+        // "auto"는 모델이 아니라 자리표시자다.
+        XCTAssertFalse(models.contains { $0.id.hasSuffix("/auto") })
+        XCTAssertTrue(models.allSatisfy { $0.harness == .omp })
+    }
+
+    func testThinkingColumnBecomesSupportedEfforts() {
+        let models = OmpModelDiscovery.parse(sample)
+        let glm = try? XCTUnwrap(models.first { $0.id.hasSuffix("glm-5.2") })
+        XCTAssertEqual(glm?.supportedEfforts, [.minimal, .low, .medium, .high, .max])
+        let sol = models.first { $0.id.hasSuffix("gpt-5.6-sol") }
+        XCTAssertEqual(sol?.supportedEfforts, [.low, .medium, .high, .xhigh, .max])
+        // 지원 목록이 "-"면 하네스 기본값에 맡긴다.
+        XCTAssertEqual(models.first { $0.id.hasSuffix("glm-5.3") }?.supportedEfforts, [])
+    }
+
+    /// 표에 적힌 순서가 아니라 축의 순서로 고정해야 한다 —
+    /// 옵션 순서가 흔들리면 사용자도 라우터도 매번 다른 목록을 본다.
+    func testEffortOrderFollowsTheAxisNotTheTable() {
+        XCTAssertEqual(
+            OmpModelDiscovery.efforts(from: "max,low,high"),
+            [.low, .high, .max]
+        )
+    }
+}
+
+extension OmpModelDiscoveryTests {
+    func testEnabledModelsNarrowThePicker() {
+        let config = """
+        modelRoles:
+          default: openai-codex/gpt-5.6-sol
+        enabledModels:
+          - alibaba-token-plan/glm-5.2
+          - openrouter/z-ai/glm-5.3-flash
+        tools:
+          approvalMode: yolo
+        """
+        let enabled = OmpModelDiscovery.parseEnabledModels(config)
+        XCTAssertEqual(enabled, ["alibaba-token-plan/glm-5.2", "openrouter/z-ai/glm-5.3-flash"])
+
+        let models = OmpModelDiscovery.parse(sample)
+        let kept = OmpModelDiscovery.filtered(models, by: enabled)
+        XCTAssertEqual(kept.map(\.id), ["alibaba-token-plan/glm-5.2"])
+    }
+
+    /// 화이트리스트가 없거나 하나도 안 맞으면 거르지 않는다 — 빈 피커가 더 나쁘다.
+    func testMissingOrUnmatchedWhitelistKeepsEverything() {
+        let models = OmpModelDiscovery.parse(sample)
+        XCTAssertEqual(OmpModelDiscovery.filtered(models, by: []).count, models.count)
+        XCTAssertEqual(OmpModelDiscovery.filtered(models, by: ["nope/nothing"]).count, models.count)
+        XCTAssertTrue(OmpModelDiscovery.parseEnabledModels("modelRoles:\n  default: x\n").isEmpty)
+    }
+}

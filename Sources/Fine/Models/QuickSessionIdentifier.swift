@@ -13,6 +13,8 @@ enum QuickSessionIdentifier {
 
     static func isValid(_ value: String, for harness: QuickHarness) -> Bool {
         if harness == .opencode { return value.hasPrefix("ses_") && storageKey(value) != nil }
+        // omp: 아직 세션이 생성된 적이 없어 실제 ID 형식을 확인하지 못했다.
+        // `omp -r`은 ID 접두사·경로·피커를 모두 받으므로, 확인 전까지는 기본 규칙을 따른다.
         return UUID(uuidString: value) != nil
     }
 }

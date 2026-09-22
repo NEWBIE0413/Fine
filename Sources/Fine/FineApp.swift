@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // 저장된 외형을 창이 뜨기 전에 건다. SwiftUI의 preferredColorScheme만으로는
+        // AppKit이 그리는 창 테두리·재질이 따라오지 않는다.
+        MainActor.assumeIsolated { FineAppearance.apply(.stored) }
         startControlServer()
     }
 

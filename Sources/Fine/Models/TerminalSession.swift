@@ -240,6 +240,12 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
                         harness: harness, createdAfter: startedAt,
                         workingDirectory: QuickSessionPolicy.workingDirectory, initialPrompt: initialPrompt
                     )
+                case .omp:
+                    // omp는 세션을 `~/.omp/agent/sessions/<cwd>/`의 jsonl로 남기는데,
+                    // 아직 생성된 세션이 없어 ID 형식과 파일 이름 규칙을 확인하지 못했다.
+                    // 확인 전까지 ID를 추측하지 않는다 — 틀린 ID는 엉뚱한 대화를 여는 쪽이
+                    // 재개가 안 되는 쪽보다 나쁘다. 새 대화와 `-c` 이어하기는 정상 동작한다.
+                    resolvedID = nil
                 }
             }
             let metadata = resolvedID.map { id in
