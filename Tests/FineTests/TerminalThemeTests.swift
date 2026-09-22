@@ -87,3 +87,19 @@ extension TerminalThemeTests {
         XCTAssertLessThanOrEqual(abs(r - g), 6, "배경에 색이 돈다: \(hex)")
     }
 }
+
+extension TerminalThemeTests {
+    /// 선택 색은 세 가지를 다 줘야 한다. 하나라도 비우면 그 상태에서 xterm의 기본값이
+    /// 나오는데, 그 회색은 밝은 바탕에서 검게, 어두운 바탕에서 희게 보인다.
+    func testSelectionIsFullySpecifiedInBothSchemes() throws {
+        for isDark in [false, true] {
+            let palette = TerminalPalette.forHarness(.claude, isDark: isDark)
+            for key in ["selectionBackground", "selectionInactiveBackground", "selectionForeground"] {
+                let value = try XCTUnwrap(palette.colors[key], "\(isDark ? "dark" : "light") \(key)")
+                XCTAssertTrue(value.hasPrefix("#"), "\(key) = \(value)")
+            }
+            // 선택 위의 글자는 바탕이 아니라 선택면 위에서 읽힌다.
+            XCTAssertNotEqual(palette.colors["selectionForeground"], palette.colors["selectionBackground"])
+        }
+    }
+}

@@ -14,7 +14,11 @@ struct TerminalPalette: Equatable {
         "foreground": "#000000",
         "cursor": "#000000",
         "cursorAccent": "#ffffff",
+        // 셋을 다 지정해야 한다. 활성 선택만 주면 포커스가 빠진 순간 xterm의 기본
+        // 회색이 나오고, 그것이 흰 바탕에서는 검은 덩어리로 보인다.
         "selectionBackground": "#c2dbff",
+        "selectionInactiveBackground": "#dde7f4",
+        "selectionForeground": "#000000",
         "black": "#000000",
         "red": "#000000",
         "green": "#000000",
@@ -54,6 +58,8 @@ struct TerminalPalette: Equatable {
         "cursor": "#e8e8e8",
         "cursorAccent": "#1e1e1e",
         "selectionBackground": "#2f4a72",
+        "selectionInactiveBackground": "#2b3442",
+        "selectionForeground": "#f2f2f2",
         "black": "#e8e8e8",
         "red": "#e8e8e8",
         "green": "#e8e8e8",
