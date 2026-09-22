@@ -93,7 +93,9 @@ final class TerminalWebView: NSView {
     /// Height of Claude Code's built-in hint row that the Fine status rail replaces.
     static let claudeFooterCrop: CGFloat = 18
 
-    private let palette: TerminalPalette
+    private var palette: TerminalPalette
+    /// 외형이 바뀌면 같은 하네스의 반대편 팔레트로 다시 칠해야 한다.
+    private var harness: QuickHarness = .claude
     private let statusText: String
     private let footerCrop: CGFloat
     private let webView: WKWebView
@@ -116,15 +118,18 @@ final class TerminalWebView: NSView {
         frame: NSRect,
         palette: TerminalPalette,
         statusText: String,
+        harness: QuickHarness = .claude,
         footerCrop: CGFloat = TerminalWebView.claudeFooterCrop
     ) {
         self.palette = palette
+        self.harness = harness
         self.statusText = statusText
         self.footerCrop = footerCrop
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: frame, configuration: config)
         super.init(frame: frame)
 
+        observeAppearance()
         config.userContentController.add(BridgeProxy(owner: self), name: "bridge")
         webView.navigationDelegate = navigationProxy
         webView.setValue(false, forKey: "drawsBackground")
@@ -244,6 +249,20 @@ final class TerminalWebView: NSView {
         if isReady, lastFittedSize != bounds.size {
             lastFittedSize = bounds.size
             webView.evaluateJavaScript("window.smFit && window.smFit()", completionHandler: nil)
+        }
+    }
+
+    /// 외형이 바뀌면 같은 하네스의 반대편 팔레트로 다시 칠한다.
+    /// 터미널은 SwiftUI 밖(WKWebView)이라 colorScheme 환경이 닿지 않는다.
+    private func observeAppearance() {
+        NotificationCenter.default.addObserver(
+            forName: FineAppearance.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.palette = .forHarness(self.harness, isDark: FineAppearance.isDarkNow)
+                self.applyTheme()
+            }
         }
     }
 

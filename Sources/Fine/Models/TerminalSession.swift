@@ -83,8 +83,13 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         if let terminalView { return terminalView }
         let view = TerminalWebView(
             frame: .zero,
-            palette: .forHarness(configuration.harness),
+            // 터미널은 UI에서만 만들어진다. 외형 조회는 메인 액터에 묶여 있다.
+            palette: .forHarness(
+                configuration.harness,
+                isDark: MainActor.assumeIsolated { FineAppearance.isDarkNow }
+            ),
             statusText: configuration.terminalStatus,
+            harness: configuration.harness,
             // OpenCode draws its own input and status rows at the bottom; only
             // Claude Code's hint row is replaced by Fine's status rail.
             footerCrop: configuration.harness == .claude ? TerminalWebView.claudeFooterCrop : 0

@@ -40,6 +40,21 @@ enum FineAppearance: String, CaseIterable, Identifiable {
 
     static let storageKey = "fineAppearance"
 
+    /// 외형이 바뀌었다는 알림. 터미널처럼 SwiftUI 밖에서 그리는 면들이 이것을 듣는다.
+    static let didChange = Notification.Name("FineAppearanceDidChange")
+
+    /// "시스템"일 때는 OS가 정한 값을 따라야 하므로 실제 해석된 외형을 본다.
+    @MainActor
+    static var isDarkNow: Bool {
+        switch stored {
+        case .dark: return true
+        case .light: return false
+        case .system:
+            return NSApplication.shared.effectiveAppearance
+                .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        }
+    }
+
     /// 실행 직후와 값이 바뀔 때마다 호출한다.
     ///
     /// 앱 외형만 바꾸면 이미 떠 있는 창은 따라오지 않는다. SwiftUI의
@@ -51,6 +66,7 @@ enum FineAppearance: String, CaseIterable, Identifiable {
         for window in NSApplication.shared.windows {
             window.appearance = appearance.nsAppearance
         }
+        NotificationCenter.default.post(name: didChange, object: nil)
     }
 }
 

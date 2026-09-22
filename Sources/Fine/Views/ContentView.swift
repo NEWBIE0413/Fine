@@ -49,7 +49,6 @@ struct ContentView: View {
         }
         .environmentObject(appState)
         .focusedSceneObject(appState)
-        .preferredColorScheme(.light)
         .onAppear {
             if sceneWindowStateID == nil {
                 sceneWindowStateID = appState.windowStateID
