@@ -266,6 +266,23 @@ func render(command: String, result: Any) -> String {
         return (dict["messages"] as? [[String: Any]] ?? []).map { m in
             "[\(String(str(m["timestamp"]).prefix(16))) \(str(m["role"]))] \(str(m["text"]))"
         }.joined(separator: "\n\n")
+    case "doctor":
+        guard let dict = result as? [String: Any] else { return "\(result)" }
+        // 표가 아니라 목록으로 낸다 — 고칠 명령이 항목에 딸려 나와야 그대로 실행할 수 있다.
+        var lines: [String] = []
+        for check in dict["checks"] as? [[String: Any]] ?? [] {
+            let ok = str(check["ok"]) == "yes"
+            let optional = str(check["optional"]) == "yes"
+            let mark = ok ? "✓" : (optional ? "·" : "✗")
+            lines.append("\(mark) \(str(check["name"]))  \(str(check["detail"]))")
+            if !ok, let fix = check["fix"] as? String, !fix.isEmpty {
+                lines.append("    → \(fix)")
+            }
+        }
+        lines.append("")
+        lines.append(str(dict["summary"]))
+        return lines.joined(separator: "\n")
+
     case "models.list":
         guard let dict = result as? [String: Any] else { return "\(result)" }
         let rows = (dict["models"] as? [[String: Any]] ?? []).map { m in

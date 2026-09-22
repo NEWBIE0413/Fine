@@ -1,237 +1,55 @@
 # Fine
 
-[![Fine demo — click to watch the full video](Assets/fine-demo.gif)](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
+**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [中文](README.zh.md)
 
-[Watch the full demo · 1080p / 60 fps](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
+[![Fine](Assets/fine-demo.gif)](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
 
-Fine is a lightweight native macOS workspace for long-running agent
-conversations. It combines a translucent conversation index with a focused
-xterm.js workspace, while every conversation remains a real resumable provider
-session.
+<sub>[Watch the demo](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)</sub>
 
-## Why Fine
+A quiet Mac window for the coding agents you already use.
 
-Terminal multiplexers are powerful, but they are not designed around
-conversation history. Fine treats the transcript as the durable object:
+## What it is
 
-- open a blank or prompted conversation in one step;
-- choose the harness per conversation: Claude Code, stock Codex, or OpenCode;
-- resume Claude, Codex, and OpenCode conversations by their native session IDs;
-- restore the exact model and effort used by that transcript;
-- keep several live conversations in native macOS windows;
-- reopen the exact active tabs and selected conversation after an app restart;
-- route Claude-compatible model aliases through an optional local gateway.
+Claude Code, Codex, OpenCode and omp each run in their own terminal. Fine puts
+them in one window, side by side, as conversations you can leave and come back
+to.
 
-Fine intentionally stays small. There is no embedded database, account layer,
-Electron runtime, or background terminal server.
+Nothing is wrapped or re-implemented. Each conversation is the real agent,
+running the way it does in a terminal, keeping its own history.
 
-## Interface
+## Why
 
-- **Native AppKit shell** with independent macOS windows and restoration.
-- **Glass conversation rail** with full-row click targets, drag insertion guides,
-  and a sliding selection block.
-- **Quiet ASCII landscape** rendered on a fixed character grid behind the new-chat composer.
-- **Demand-paged history** across Claude, Codex, and OpenCode with compact monochrome logos.
-- **Flat white terminal canvas** with WebGL-accelerated xterm.js rendering.
-- **Compact terminal chrome** showing the active provider, model, and effort.
-- **Clean Claude surface** that replaces the verbose built-in footer hint.
-- **Korean-first labels** with native IME composition and CJK-safe rendering.
+Four agents means four terminal windows, and nowhere that remembers which
+conversation was which. Fine keeps the list — what you were doing, which agent
+was doing it, how far it got — and reopens any of them where it stopped.
 
-## Engineering highlights
+Pick the agent and the model when you start a conversation, or let Fine pick
+from how hard your question looks.
 
-### Real PTY lifecycle
-
-Each tab owns a direct pseudo-terminal process. Fine propagates terminal
-resizes, handles process-group cleanup, and prevents detached Claude children
-from surviving a closed window.
-
-### Transcript-aware resume
-
-Fine indexes Claude's local JSONL metadata and reads Codex/OpenCode session
-metadata from their read-only local stores, preserving each conversation's
-harness, model, and effort. Resume launches
-explicitly clear inherited child-session markers so future transcripts remain
-durable.
-
-### Terminal parity
-
-Every conversation is the command you would type. The default model option
-launches plain `ccv -y`, `codex`, or `opencode` with no model or effort flag and no
-router, so each harness applies its own settings. Sessions start
-from an interactive login shell, so a Finder-launched Fine inherits the same
-`~/.zshrc` environment as a terminal window: provider keys, the standalone
-`opencode` ahead of Homebrew's, and the same `ccv`.
-
-### Native model routing
-
-Claude models run directly. Codex, Kimi, Gemini, Alibaba, OpenRouter, and
-NVIDIA aliases can be discovered from a local Anthropic-compatible router at
-`127.0.0.1:4141`. OpenCode models come from `opencode models`, which lists
-only what `opencode.json` whitelists. The Codex harness runs the stock Codex CLI
-directly and never uses that router. The terminal still runs the agent
-itself, so tool calls, transcript storage, and session resume remain native.
-Fine requests permission-skip mode for every new and resumed session:
-Claude uses `ccv -y`, Codex uses `--dangerously-bypass-approvals-and-sandbox`
-(no approvals or sandbox), and OpenCode uses `--auto` (auto-approve unless an
-explicit deny rule applies). These launch flags do not change global CLI settings.
-
-Open-tab titles follow the harness's stored title: Claude transcript `ai-title`,
-Codex's thread `name` (falling back to `title`), and OpenCode's session `title`.
-Codex and OpenCode metadata is read from their local SQLite stores in read-only
-mode every two seconds on a utility queue. A missing database or title retains
-the existing label. For current Codex paginated history, new-session identity
-falls back to a unique CLI thread matching the launch time, directory, and
-initial prompt; ambiguous matches retain the fallback label. This conservative
-fallback should be replaced with a per-process thread identity API when Codex
-exposes one. The recent-conversation list combines all three harnesses for `~/cld`, sorted
-by last update. Each row has a monochrome harness logo on its right edge and
-resumes through that harness. Archived sessions and native subagent sessions
-are excluded. History loads in 30-row pages as the list reaches its end. Native
-queries fetch only the requested page depth plus one lookahead row; Claude title
-indexing is incremental and reuses unchanged transcript metadata. OpenCode `ses_…` IDs retain their original case.
-
-### Deliberately small state model
-
-Window geometry, open-tab snapshots, and session configuration live only under
-`~/.fine`; composer preferences use Fine's own macOS defaults domain. Provider
-transcripts remain the source of truth for conversation history.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    A[SwiftUI / AppKit shell] --> B[TerminalSession]
-    B --> C[PTYProcess]
-    B --> D[WKWebView + xterm.js]
-    C --> E[Claude Code CLI]
-    E --> F[Claude API]
-    E -->|optional aliases| G[Local model router]
-    H[Claude JSONL transcripts] --> I[QuickConversationScanner]
-    I --> A
-```
-
-```text
-Sources/Fine/
-├── Control/      UNIX-socket control server and the `fine` command router
-├── Models/       session policy, transcript scanning, window state
-├── Terminal/     PTY lifecycle, xterm bridge, palette and web resources
-└── Views/        sidebar, composer, terminal workspace and window binding
-Sources/FineCLI/  the `fine` command-line client
-```
-
-## Requirements
-
-- macOS 14 or later
-- Xcode 16 or a compatible Swift 6 toolchain
-- Claude Code CLI
-- Codex CLI for the direct Codex harness
-- OpenCode CLI for the OpenCode harness
-- the local `ccv` launcher at `~/myworld/ccv`
-- optionally, a compatible model router on `127.0.0.1:4141`
-
-Fine creates `~/cld` as its conversation workspace when needed. The `ccv`
-launcher is a local integration boundary rather than part of this repository:
-it starts Claude Code with the selected model, effort, resume ID, and optional
-gateway environment.
-
-## Build, test, and package
+## Install
 
 ```sh
-swift test
+git clone https://github.com/NEWBIE0413/Fine.git
+cd Fine
 ./scripts/package-app.sh release
-```
-
-The packaging script builds and ad-hoc signs `.build/Fine.app`.
-
-```sh
 ditto .build/Fine.app /Applications/Fine.app
-open /Applications/Fine.app
 ```
 
-## Command line: `fine`
+Bring the agents you want. Fine finds the ones you have.
 
-Everything the app can do is also available from the terminal. Fine opens a
-line-delimited JSON control socket at `~/.fine/control.sock` on launch, and the
-`fine` CLI talks to it. If the app is not running, the CLI launches it in the
-background and waits for the socket (up to 15 seconds).
+## Setting it up
+
+There is no settings window and no sign-in. The agents already handle their own
+accounts, and Fine has a command line instead:
 
 ```sh
-swift build -c release
-cp .build/release/fine-cli ~/bin/fine   # the build product is fine-cli: on a
-                                        # case-insensitive disk `fine` would
-                                        # collide with the app binary `Fine`
+fine doctor          # what is ready, what is missing, and the command that fixes it
+fine appearance dark # applies immediately
+fine tabs            # what is open
 ```
 
-```text
-fine windows                              창 목록
-fine window new | focus <win> | close <win>
-
-fine list [--harness claude|codex|opencode] [-n N]
-fine new [--harness H] [--model M] [--effort E] [--proxy] [prompt…]
-fine resume <session-id> [--harness H]
-fine restart <tab> [--model M] [--effort E]
-
-fine tabs
-fine tab select|close <tab>
-fine tab next|prev
-fine tab move <tab> <index|+1|-1>
-fine home
-
-fine models [--harness H]
-fine state                                ~/.fine/window-states.json 덤프
-fine ping
-```
-
-Options: `--json` prints the raw response, `-w/--window <index|id-prefix|front>`
-picks the window, `--no-focus` leaves the app in the background. `<win>` is an
-index, an id prefix, or `front`; `<tab>` is an index, a tab name, a session id,
-or an id prefix. Values you do not pass to `fine new` come from the composer's
-current defaults; `--model default` means "기본 (터미널과 동일)".
-
-The socket protocol is one request per connection:
-`{"command":"tab.select","args":{"tab":"2"}}\n` →
-`{"ok":true,"result":{…}}\n` or `{"ok":false,"error":"…"}\n`. Any language can
-drive it. The app-side router lives in `Sources/Fine/Control/`; when a UI
-feature is added, its command is added in the same commit.
-
-## Keyboard shortcuts
-
-| Shortcut | Action |
-| --- | --- |
-| `Command-N` | Open a new Fine window |
-| `Command-T` | Start a blank conversation |
-| `Command-Shift-[` | Select the previous live conversation |
-| `Command-Shift-]` | Select the next live conversation |
-
-## Design notes
-
-The visual and interaction constraints are documented in
-[DESIGN.md](DESIGN.md). The implementation favors native materials, restrained
-contrast, and measured spacing rather than floating card-heavy UI.
-
-## Privacy
-
-Fine does not upload credentials, copy OAuth tokens, or maintain its own
-conversation database. It invokes local tools and reads local Claude transcript
-metadata, plus local Codex/OpenCode session metadata. Provider authentication remains owned by the corresponding local CLI
-or router.
+It is meant to be read and driven by a coding agent as much as by you.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Bundled terminal components are documented in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-
-## Native terminal messaging
-
-`fine read <tab> 20`, `fine send <tab> 'text'`, `fine msg <tab> 'message'`, and `fine keys <tab> Enter` use the shared smux protocol. Read before each send/key action; successful actions consume the read. Use `fine trust <target>` for a user-authorized conversation across windows, tmux, or hosts. The receiver can reply through an automatically recorded reverse grant.
-
-Targets are Fine tab names/IDs, `%pane`, `tmux:label`, `arch:label`, or `mac:fine:<UUID>`. `fine resolve` returns a canonical address. `fine id` uses the `FINE_TAB_ID` exported to each tab's PTY. `tmux-bridge` accepts `fine:<UUID>` directly and `list -a` includes Fine tabs. Host routing uses the existing SSH/NUC relay; Mac Remote Login is unnecessary in relay mode.
-
-`fine transcript <tab> -n 20` reads structured Claude, Codex, or OpenCode conversation text. It is separate from the current terminal screen and does not satisfy the read guard. Tabs retain their UUID across restoration, while a new PTY gets a new fingerprint so old guards and trust expire.
-
-### Isolated integration tests
-
-`FINE_HOME=/absolute/test/root` relocates app data and default harness paths. Set `CODEX_HOME`/`XDG_DATA_HOME` as well when overriding their explicit locations. A shell HOME override alone does not isolate Foundation paths on macOS. The control server refuses to replace an active socket; test instances must use their own root.
-
-After `swift build`, run `python3 scripts/test-bridge-e2e.py` to launch a separate native app with a harmless harness stub and isolated tmux server. It checks screen capture, PTY identity, both message directions, guard consumption, and preservation of the live app socket. Agent instructions are in `skills/fine/SKILL.md`.
+MIT
