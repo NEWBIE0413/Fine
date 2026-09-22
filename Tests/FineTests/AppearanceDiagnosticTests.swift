@@ -144,3 +144,14 @@ private struct SendProbe: View {
                 .fill(Color(red: 0.22, green: 0.27, blue: 0.23)))
     }
 }
+
+extension AppearanceDiagnosticTests {
+    /// 배경 그림은 다른 저장소들과 같은 `~/.fine`에서 찾아야 한다.
+    /// 홈 디렉터리 바로 아래를 보면 사용자가 파일을 제자리에 둬도 영영 안 보인다.
+    func testSceneDirectoryIsTheAppDataFolder() {
+        let expected = FinePaths.home.appendingPathComponent(".fine", isDirectory: true)
+        XCTAssertEqual(NightSceneView.sceneDirectory.path, expected.path)
+        XCTAssertNotEqual(NightSceneView.sceneDirectory.path, FinePaths.home.path)
+        XCTAssertEqual(NightSceneView.sceneFilenames.first, "home-scene.png")
+    }
+}

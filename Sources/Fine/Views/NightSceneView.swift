@@ -22,14 +22,25 @@ struct NightSceneView: View {
     ///
     /// 저작권 있는 그림을 저장소에 넣지 않으려고 기본값을 절차적으로 둔다.
     static var userSceneURL: URL? {
-        let directory = FinePaths.home
-        for name in ["home-scene.png", "home-scene.jpg", "home-scene.jpeg",
-                     "home-scene.heic", "home-scene.webp"] {
+        // 앱의 데이터 폴더는 FinePaths.home 자체가 아니라 그 아래 `.fine`이다.
+        let directory = sceneDirectory
+        for name in sceneFilenames {
             let url = directory.appendingPathComponent(name)
             if FileManager.default.isReadableFile(atPath: url.path) { return url }
         }
         return nil
     }
+
+    /// 사용자가 그림을 두는 자리. 다른 저장소들과 같은 폴더를 쓴다.
+    static var sceneDirectory: URL {
+        FinePaths.home.appendingPathComponent(".fine", isDirectory: true)
+    }
+
+    /// 찾는 파일 이름들. 앞의 것이 우선한다.
+    static let sceneFilenames = [
+        "home-scene.png", "home-scene.jpg", "home-scene.jpeg",
+        "home-scene.heic", "home-scene.webp",
+    ]
 
     private static var bundledArtwork: Bool {
         Bundle.module.image(forResource: "HomeScene") != nil
