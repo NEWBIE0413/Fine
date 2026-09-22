@@ -40,15 +40,9 @@ struct NightSceneView: View {
             let height = geometry.size.height
             Group {
                 if let image = userImage {
-                    Image(nsImage: image)
-                        .resizable()
-                        .interpolation(.high)
-                        .aspectRatio(contentMode: .fill)
+                    SceneArtwork(image: Image(nsImage: image), width: geometry.size.width)
                 } else if Self.bundledArtwork {
-                    Image("HomeScene", bundle: .module)
-                        .resizable()
-                        .interpolation(.high)
-                        .aspectRatio(contentMode: .fill)
+                    SceneArtwork(image: Image("HomeScene", bundle: .module), width: geometry.size.width)
                 } else {
                     ProceduralNightSky(reduceMotion: reduceMotion)
                 }
@@ -76,6 +70,37 @@ struct NightSceneView: View {
     static func loadUserImage() -> NSImage? {
         guard let url = userSceneURL else { return nil }
         return NSImage(contentsOf: url)
+    }
+}
+
+/// 넣는 그림은 대개 배너보다 작고 비율도 다르다. 늘려서 채우면 흐려지고,
+/// 맞춰 넣으면 옆이 비어 잘린 티가 난다.
+///
+/// 그래서 두 겹으로 놓는다: 뒤에는 크게 키워 흐린 같은 그림을 깔아 가장자리를 메우고,
+/// 앞에는 원본을 비율 그대로 올린다. 흐린 층이 옆을 채우므로 앞 그림을 억지로
+/// 늘릴 필요가 없고, 해상도의 한계도 그 흐림 속에 묻힌다.
+private struct SceneArtwork: View {
+    let image: Image
+    let width: CGFloat
+
+    var body: some View {
+        ZStack {
+            image
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fill)
+                .blur(radius: 28, opaque: true)
+                .saturation(1.08)
+                .overlay(Color.black.opacity(0.28))
+
+            image
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                // 원본보다 조금만 키운다. 두 배로 늘리면 흐린 층과 겹쳐 더 탁해진다.
+                .frame(maxWidth: min(width, 1100))
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 
