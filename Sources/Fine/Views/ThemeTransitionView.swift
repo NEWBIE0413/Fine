@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// 밝기를 바꾸면 화면이 한 프레임에 갈아엎어진다. 그 순간이 어디서 시작됐는지
@@ -6,18 +7,35 @@ import SwiftUI
 /// 그래서 누른 자리에서 파문이 퍼져나간다. 색면이 아니라 글자다 — Fine의 홈 배경이
 /// 이미 ASCII 풍경이라 같은 말투를 쓴다.
 enum ThemeTransition {
-    /// 파문의 시작점을 창 좌표로 싣는다.
+    /// 파문의 시작점과, 바뀌기 직전 화면을 싣는다.
     static let begin = Notification.Name("FineThemeTransitionBegin")
     static let originKey = "origin"
+    static let snapshotKey = "snapshot"
 
-    static let duration: TimeInterval = 0.62
+    static let duration: TimeInterval = 0.72
+
+    /// 창 외형은 한 번에 통째로 바뀐다. 중간 상태가 없으므로 색을 서서히 섞을 수 없다.
+    ///
+    /// 그래서 바꾸기 직전의 화면을 한 장 찍어 위에 덮어두고, 밑에서 실제 외형을 바꾼 뒤,
+    /// 덮어둔 장면에 구멍을 내어 넓혀간다. 파문이 지나간 자리부터 새 테마가 드러난다.
+    @MainActor
+    static func ripple(from origin: CGPoint, applying change: () -> Void) {
+        guard let content = NSApp.keyWindow?.contentView else { change(); return }
+        let snapshot = snapshot(of: content)
+        change()
+        var payload: [String: Any] = [originKey: NSValue(point: origin)]
+        if let snapshot { payload[snapshotKey] = snapshot }
+        NotificationCenter.default.post(name: begin, object: nil, userInfo: payload)
+    }
 
     @MainActor
-    static func ripple(from origin: CGPoint) {
-        NotificationCenter.default.post(
-            name: begin, object: nil,
-            userInfo: [originKey: NSValue(point: origin)]
-        )
+    private static func snapshot(of view: NSView) -> NSImage? {
+        guard view.bounds.width > 1, view.bounds.height > 1,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let image = NSImage(size: view.bounds.size)
+        image.addRepresentation(rep)
+        return image
     }
 }
 
@@ -27,13 +45,15 @@ struct ThemeTransitionOverlay: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var origin: CGPoint?
     @State private var startedAt: Date?
+    /// 바뀌기 직전의 화면. 이것을 걷어내면서 새 테마가 드러난다.
+    @State private var snapshot: NSImage?
 
     /// 안쪽에서 바깥으로 갈수록 옅어지는 글자들. 굵은 블록은 쓰지 않는다 —
     /// 화면을 덮는 것이 아니라 스쳐 지나가는 파문이라야 한다.
     private static let ramp: [String] = ["╬", "╫", "┼", "╋", "┿", "─", "·", "˙"]
     private static let cell = CGSize(width: 11, height: 17)
     /// 파문이 한 번에 걸치는 두께. 좁으면 선처럼, 넓으면 안개처럼 보인다.
-    private static let bandWidth: CGFloat = 96
+    static let bandWidth: CGFloat = 96
 
     var body: some View {
         GeometryReader { geometry in
@@ -42,8 +62,33 @@ struct ThemeTransitionOverlay: View {
                     TimelineView(.animation) { timeline in
                         let elapsed = timeline.date.timeIntervalSince(startedAt)
                         let progress = min(max(elapsed / ThemeTransition.duration, 0), 1)
-                        Canvas { context, size in
-                            draw(&context, size: size, origin: origin, progress: progress)
+                        let reach = farthestCorner(from: origin, in: geometry.size)
+                        // 파문의 앞머리가 곧 구멍의 가장자리다. 둘이 어긋나면
+                        // 색이 먼저 바뀌거나 늦게 따라와 두 사건으로 보인다.
+                        let radius = ThemeTransitionOverlay.radius(progress: progress, reach: reach)
+
+                        ZStack {
+                            if let snapshot {
+                                Image(nsImage: snapshot)
+                                    .resizable()
+                                    .interpolation(.none)
+                                    .frame(width: geometry.size.width, height: geometry.size.height)
+                                    .mask(
+                                        // 사각형에서 자라나는 원을 도려낸다.
+                                        Canvas { context, size in
+                                            var hole = Path(CGRect(origin: .zero, size: size))
+                                            hole.addPath(Path(ellipseIn: CGRect(
+                                                x: origin.x - radius, y: origin.y - radius,
+                                                width: radius * 2, height: radius * 2
+                                            )))
+                                            context.fill(hole, with: .color(.black), style: FillStyle(eoFill: true))
+                                        }
+                                    )
+                            }
+                            Canvas { context, size in
+                                draw(&context, size: size, origin: origin,
+                                     progress: progress, radius: radius)
+                            }
                         }
                         .onChange(of: progress >= 1) { _, done in
                             if done { clear() }
@@ -59,6 +104,7 @@ struct ThemeTransitionOverlay: View {
             guard !reduceMotion,
                   let value = note.userInfo?[ThemeTransition.originKey] as? NSValue else { return }
             origin = value.pointValue
+            snapshot = note.userInfo?[ThemeTransition.snapshotKey] as? NSImage
             startedAt = Date()
         }
     }
@@ -66,20 +112,26 @@ struct ThemeTransitionOverlay: View {
     private func clear() {
         origin = nil
         startedAt = nil
+        snapshot = nil
+    }
+
+    private func farthestCorner(from origin: CGPoint, in size: CGSize) -> CGFloat {
+        [CGPoint(x: 0, y: 0), CGPoint(x: size.width, y: 0),
+         CGPoint(x: 0, y: size.height), CGPoint(x: size.width, y: size.height)]
+            .map { hypot($0.x - origin.x, $0.y - origin.y) }
+            .max() ?? size.width
+    }
+
+    /// 끝에서 급히 멈추면 파문이 벽에 부딪힌 것처럼 보인다. 감속해서 빠져나간다.
+    static func radius(progress: Double, reach: CGFloat) -> CGFloat {
+        let eased = 1 - pow(1 - progress, 2.2)
+        return eased * (reach + bandWidth)
     }
 
     private func draw(
-        _ context: inout GraphicsContext, size: CGSize, origin: CGPoint, progress: Double
+        _ context: inout GraphicsContext, size: CGSize, origin: CGPoint,
+        progress: Double, radius: CGFloat
     ) {
-        // 시작점에서 가장 먼 모서리까지 닿아야 화면 전체를 지나간다.
-        let corners = [
-            CGPoint(x: 0, y: 0), CGPoint(x: size.width, y: 0),
-            CGPoint(x: 0, y: size.height), CGPoint(x: size.width, y: size.height),
-        ]
-        let reach = corners.map { hypot($0.x - origin.x, $0.y - origin.y) }.max() ?? size.width
-        // 끝에서 급히 멈추면 파문이 벽에 부딪힌 것처럼 보인다. 감속해서 빠져나간다.
-        let eased = 1 - pow(1 - progress, 2.2)
-        let radius = eased * (reach + Self.bandWidth)
         // 파문 자체도 지나가며 옅어진다.
         let fade = 1 - pow(progress, 2.4)
         guard fade > 0.01 else { return }

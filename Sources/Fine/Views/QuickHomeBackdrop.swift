@@ -95,14 +95,26 @@ struct QuickHomePresentation<Content: View>: View {
             ScrollView(.vertical) {
                 VStack(spacing: 28) {
                     VStack(spacing: 12) {
-                        Text("생각을 펼칠 시간")
-                            .font(.system(size: geometry.size.width < 620 ? 28 : 34, weight: .medium))
-                            .tracking(-1.1)
+                        // 큰 글자는 자간을 조이고 행간을 좁혀야 한 덩어리로 읽힌다.
+                        // 세리프는 문장에 무게를 주므로 인용에 맞고, 아래 출처는 산세리프로
+                        // 낮춰 둘의 역할을 갈라놓는다.
+                        Text(HomeEpigraph.current.text)
+                            .font(.system(
+                                size: geometry.size.width < 620 ? 26 : 32,
+                                weight: .regular,
+                                design: .serif
+                            ))
+                            .italic()
+                            .tracking(-0.6)
+                            .lineSpacing(4)
                             .foregroundStyle(palette.ink)
-                        Text("질문도, 아이디어도. 여기서 시작하세요.")
-                            .font(.system(size: 14))
+                            .frame(maxWidth: 560)
+                        Text(HomeEpigraph.current.attribution)
+                            .font(.system(size: 12, weight: .medium))
+                            .tracking(0.6)
+                            .textCase(.uppercase)
                             // 어두운 배경 위에서 회색 글자는 가라앉는다. 대비를 올린다.
-                            .foregroundStyle(palette.isDark ? palette.ink.opacity(0.62) : .secondary)
+                            .foregroundStyle(palette.isDark ? palette.ink.opacity(0.52) : .secondary)
                     }
                     .multilineTextAlignment(.center)
                     .accessibilityElement(children: .combine)

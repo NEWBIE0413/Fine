@@ -91,11 +91,12 @@ struct AppearanceToggle: View {
     var body: some View {
         Button {
             let next: FineAppearance = isDark ? .light : .dark
-            // 파문을 먼저 띄우고 색을 바꾼다. 순서가 반대면 화면이 이미 바뀐 뒤에
-            // 파문이 도착해 두 사건이 따로 논다.
-            ThemeTransition.ripple(from: center)
-            stored = next.rawValue
-            FineAppearance.apply(next)
+            // 바꾸는 일 자체를 파문에 맡긴다. 파문이 이전 화면을 붙잡아 두고,
+            // 지나간 자리부터 새 테마가 드러난다.
+            ThemeTransition.ripple(from: center) {
+                stored = next.rawValue
+                FineAppearance.apply(next)
+            }
         } label: {
             Image(systemName: isDark ? "sun.max" : "moon.stars")
                 .font(.system(size: 12, weight: .medium))
