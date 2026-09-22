@@ -34,6 +34,7 @@ final class AppState: ObservableObject {
             }
             sessions.forEach(bindPersistence)
             selectedSession = sessions.first { $0.id == claimed.selectedSessionID }
+            resumeRestoredSessions()
         } else {
             if let requestedWindowStateID, !storage.contains(id: requestedWindowStateID) {
                 windowStateID = requestedWindowStateID
@@ -44,6 +45,22 @@ final class AppState: ObservableObject {
             persistWindowState()
         }
         FineWindowRegistry.shared.register(self)
+    }
+
+    /// Fine을 다시 열면 열려 있던 대화가 스스로 이어진다.
+    ///
+    /// 앱이 종료될 때 자식 PTY는 같이 죽는다(그래야 launchd에 입양되지 않는다). 그래서
+    /// "몇 분 유예"로 프로세스를 살려두는 길은 없고, 대신 대화를 재개하는 쪽을 택한다.
+    /// 대화 ID가 있는 탭만 되살린다 — ID가 없으면 무엇을 이어야 할지 알 수 없고,
+    /// 그 상태에서 "최근 대화"를 집으면 다른 탭과 같은 것을 열게 된다.
+    private func resumeRestoredSessions() {
+        var claimedConversations: Set<String> = []
+        for session in sessions {
+            guard case .resume(let conversationID) = session.launch else { continue }
+            // 같은 대화를 두 탭이 붙잡지 않도록 한 번만 살린다.
+            guard claimedConversations.insert(conversationID).inserted else { continue }
+            session.startImmediately()
+        }
     }
 
     deinit {

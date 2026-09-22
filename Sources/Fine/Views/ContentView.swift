@@ -34,8 +34,11 @@ struct ContentView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: appState.selectedSession?.id)
         }
         .background(Color.clear)
-        // 외형은 앱 전체에 한 번만 건다. 창 배경과 사이드바 재질이 같이 따라와야 한다.
-        .preferredColorScheme((FineAppearance(rawValue: appearance) ?? .system).colorScheme)
+        // 외형의 출처는 하나여야 한다. preferredColorScheme는 창에 외형을 직접 박는데,
+        // NSApp/창에 건 값과 어긋나면 레이아웃이 한 번 돌 때마다 서로를 덮어쓴다
+        // (실측: 적용 직후 DarkAqua → 잠시 뒤 Aqua로 복귀).
+        // 그래서 SwiftUI에는 맡기지 않고 AppKit 쪽 한 곳에서만 건다.
+        // 뷰들의 colorScheme 환경은 창의 실제 외형을 따라오므로 결과는 같다.
         .onChange(of: appearance) { _, value in
             FineAppearance.apply(FineAppearance(rawValue: value) ?? .system)
         }

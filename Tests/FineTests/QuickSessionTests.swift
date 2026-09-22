@@ -375,3 +375,48 @@ final class QuickSessionTests: XCTestCase {
         XCTAssertFalse(TerminalSession().matchesConversation(sessionId: UUID().uuidString))
     }
 }
+
+extension QuickSessionTests {
+    /// Fine을 다시 열면 대화 ID가 있는 탭은 스스로 이어지고, 같은 대화가 두 번 열리지 않는다.
+    @MainActor
+    func testRestoredConversationsResumeThemselvesExactlyOnce() throws {
+        let stateFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fine-autoresume-\(UUID().uuidString).json")
+        let configFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fine-autoresume-config-\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: stateFile)
+            try? FileManager.default.removeItem(at: configFile)
+        }
+        let storage = WindowStateStorage(stateFile: stateFile)
+        let windowID = UUID()
+        let shared = UUID().uuidString.lowercased()
+        storage.update(WindowState(
+            id: windowID, frame: nil, isZoomed: false, isFullscreen: false,
+            sessions: [
+                QuickSessionSnapshot(id: UUID(), name: "A", conversationID: shared,
+                                     configuration: .default),
+                // 같은 대화를 가리키는 중복 스냅샷.
+                QuickSessionSnapshot(id: UUID(), name: "A 중복", conversationID: shared,
+                                     configuration: .default),
+                // 대화 ID가 없는 탭은 무엇을 이어야 할지 알 수 없다.
+                QuickSessionSnapshot(id: UUID(), name: "이름만 남은 탭", conversationID: nil,
+                                     configuration: .default),
+            ],
+            selectedSessionID: nil
+        ))
+        let restored = AppState(
+            requestedWindowStateID: windowID, storage: storage,
+            configurationStorage: QuickSessionConfigurationStorage(stateFile: configFile)
+        )
+        XCTAssertEqual(restored.sessions.count, 3)
+        XCTAssertEqual(restored.sessions[0].launch, .resume(sessionId: shared))
+        XCTAssertEqual(restored.sessions[1].launch, .resume(sessionId: shared))
+        // ID가 없으면 빈 대화다. `.resumeLatest`였다면 다른 탭의 대화를 집어온다.
+        XCTAssertEqual(restored.sessions[2].launch, .blank)
+        // 같은 대화는 한 탭만 살아난다.
+        XCTAssertTrue(restored.sessions[0].isRunning)
+        XCTAssertFalse(restored.sessions[1].isRunning)
+        XCTAssertFalse(restored.sessions[2].isRunning)
+    }
+}

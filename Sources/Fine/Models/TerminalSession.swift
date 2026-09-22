@@ -54,10 +54,13 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         snapshot: QuickSessionSnapshot,
         configurationStorage: QuickSessionConfigurationStorage = .shared
     ) {
+        // 대화 ID가 있으면 그 대화를 정확히 이어 연다.
+        // 없으면 빈 대화로 연다 — `.resumeLatest`는 "가장 최근 대화"를 집어오므로,
+        // 여러 탭이 복구될 때 서로 같은 대화를 열어 중복이 된다.
         self.init(
             id: snapshot.id,
             name: snapshot.name,
-            launch: snapshot.conversationID.map { .resume(sessionId: $0) } ?? .resumeLatest,
+            launch: snapshot.conversationID.map { .resume(sessionId: $0) } ?? .blank,
             configuration: snapshot.configuration,
             configurationStorage: configurationStorage
         )

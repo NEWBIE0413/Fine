@@ -134,6 +134,33 @@ enum ControlCommands {
             if r.bool("focus") ?? true { focus(entry) }
             return describe(entry, index: index)
 
+        case "appearance":
+            // 값이 없으면 현재 상태만 알려준다. 있으면 저장하고 즉시 적용한다 —
+            // UserDefaults만 쓰면 실행 중인 앱은 그 변화를 모른다.
+            if let value = r.string("mode") {
+                guard let appearance = FineAppearance(rawValue: value) else {
+                    throw fail("unknown appearance: \(value) (system|light|dark)")
+                }
+                UserDefaults.standard.set(appearance.rawValue, forKey: FineAppearance.storageKey)
+                FineAppearance.apply(appearance)
+            }
+            let current = FineAppearance.stored
+            return [
+                "mode": current.rawValue,
+                "title": current.title,
+                "app": NSApp.appearance?.name.rawValue ?? "nil(시스템 따름)",
+                "key": NSApp.keyWindow?.effectiveAppearance.name.rawValue ?? "none",
+                "windows": NSApp.windows.map { window in
+                    [
+                        "title": window.title,
+                        "class": String(describing: type(of: window)),
+                        "set": window.appearance?.name.rawValue ?? "nil",
+                        "effective": window.effectiveAppearance.name.rawValue,
+                        "visible": window.isVisible,
+                    ] as [String: Any]
+                },
+            ]
+
         case "state.dump":
             let data = try JSONEncoder.pretty.encode(WindowStateStorage.shared.states)
             return try JSONSerialization.jsonObject(with: data)

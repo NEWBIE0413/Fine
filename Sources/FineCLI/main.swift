@@ -38,6 +38,7 @@ fine — Fine을 터미널에서 조작한다
 
   fine models [--harness H]                 하네스가 아는 모델·effort
   fine state                                window-states.json 덤프
+  fine appearance [system|light|dark]       외형 조회/변경 (즉시 적용)
   fine ping
 
 옵션: --json (원본 JSON), -w/--window <index|id 접두사|front>, --no-focus
@@ -190,6 +191,10 @@ do {
     case ("transcript", _):
         guard let tab = sub else { throw CLIError(message: "usage: fine transcript <tab> [-n N]") }
         command = "tab.transcript"; args["tab"] = tab; args["limit"] = Int(flags["limit"] ?? "20") ?? 20
+    case ("appearance", _):
+        command = "appearance"
+        // 값을 안 주면 현재 상태만 묻는다.
+        if let mode = sub { args["mode"] = mode }
     case ("home", _): command = "home"
     case ("models", _): command = "models.list"
     case ("state", _): command = "state.dump"
