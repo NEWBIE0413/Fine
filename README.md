@@ -1,30 +1,39 @@
+<div align="center">
+
+<img src="Assets/fine-1024.png" width="96" alt="">
+
 # Fine
 
-**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [中文](README.zh.md)
+**A quiet Mac window for the coding agents you already use.**
 
-[![Fine](Assets/fine-demo.gif)](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
+English · [한국어](README.ko.md) · [日本語](README.ja.md) · [中文](README.zh.md)
 
-<sub>[Watch the demo](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)</sub>
+<a href="https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4">
+  <img src="Assets/fine-demo.gif" width="720" alt="">
+</a>
 
-A quiet Mac window for the coding agents you already use.
+<sub>Click to watch the demo</sub>
 
-## What it is
+</div>
 
-Claude Code, Codex, OpenCode and omp each run in their own terminal. Fine puts
-them in one window, side by side, as conversations you can leave and come back
-to.
+---
 
-Nothing is wrapped or re-implemented. Each conversation is the real agent,
-running the way it does in a terminal, keeping its own history.
+## What it does
+
+Claude Code, Codex, OpenCode and omp each live in their own terminal. Fine puts
+them in one window as conversations you can leave and come back to.
+
+Nothing is wrapped or reimplemented. Each conversation is the real agent,
+running the way it runs in a terminal, keeping its own history.
 
 ## Why
 
-Four agents means four terminal windows, and nowhere that remembers which
-conversation was which. Fine keeps the list — what you were doing, which agent
+Four agents means four terminal windows and nowhere that remembers which
+conversation was which. Fine keeps that list — what you were doing, which agent
 was doing it, how far it got — and reopens any of them where it stopped.
 
-Pick the agent and the model when you start a conversation, or let Fine pick
-from how hard your question looks.
+Choose the agent and the model when you start, or let Fine choose from how hard
+the question looks.
 
 ## Install
 
@@ -37,20 +46,18 @@ ditto .build/Fine.app /Applications/Fine.app
 
 Bring the agents you want. Fine finds the ones you have.
 
-## Setting it up
+## Setting up
 
-There is no settings window and no sign-in. The agents already handle their own
-accounts, and Fine has a command line instead:
+No settings window, no sign-in. Each agent already keeps its own account, and
+Fine gives you a command line instead:
 
 ```sh
-fine doctor          # what is ready, what is missing, and the command that fixes it
-fine appearance dark # applies immediately
-fine tabs            # what is open
+fine doctor            # what is ready, what is missing, how to fix it
+fine appearance dark   # applies immediately
+fine tabs              # what is open
 ```
 
-It is meant to be read and driven by a coding agent as much as by you — see
-[`skills/fine-setup`](skills/fine-setup/SKILL.md) for the procedure one would follow.
+Written to be read and run by a coding agent as much as by you —
+[`skills/fine-setup`](skills/fine-setup/SKILL.md) is the procedure one follows.
 
-## License
-
-MIT
+<div align="center"><sub>MIT</sub></div>

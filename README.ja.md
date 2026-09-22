@@ -1,29 +1,39 @@
+<div align="center">
+
+<img src="Assets/fine-1024.png" width="96" alt="">
+
 # Fine
 
-[English](README.md) · [한국어](README.ko.md) · **日本語** · [中文](README.zh.md)
+**使っているコーディングエージェントを、ひとつのウィンドウにまとめる Mac アプリ。**
 
-[![Fine](Assets/fine-demo.gif)](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)
+[English](README.md) · [한국어](README.ko.md) · 日本語 · [中文](README.zh.md)
 
-<sub>[デモを見る](https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4)</sub>
+<a href="https://github.com/NEWBIE0413/Fine/raw/refs/heads/main/Assets/fine-demo.mp4">
+  <img src="Assets/fine-demo.gif" width="720" alt="">
+</a>
 
-すでに使っているコーディングエージェントを、ひとつのウィンドウにまとめる Mac アプリ。
+<sub>クリックでデモを再生</sub>
 
-## これは何か
+</div>
+
+---
+
+## できること
 
 Claude Code、Codex、OpenCode、omp はそれぞれ自分のターミナルで動きます。Fine は
-それらをひとつのウィンドウに並べ、離れてもまた戻ってこられる会話として扱います。
+それらをひとつのウィンドウにまとめ、離れてもまた戻ってこられる会話として扱います。
 
-包んだり作り直したりはしていません。どの会話もターミナルで動いていたエージェント
-そのもので、自分の履歴もそのまま持っています。
+包み直したり作り直したりはしていません。どの会話もターミナルで動いていたエージェント
+そのままで、積み上げた履歴もそのままです。
 
-## なぜ
+## つくった理由
 
-エージェントが四つあればターミナルも四つになり、どの会話が何だったかを覚えている
-場所はどこにもありません。Fine がその一覧を持ちます — 何をしていたか、どのエージェント
+エージェントが四つあればターミナルも四つ。そして、どの会話が何だったかを覚えている
+場所はどこにもありません。Fine がそれを持ちます。何をしていたか、どのエージェント
 だったか、どこまで進んだか。そして止まったところから開き直します。
 
-会話を始めるときにエージェントとモデルを選ぶこともできますし、質問の難しさを見て
-Fine に選ばせることもできます。
+始めるときにエージェントとモデルを自分で選んでも、質問の難しさを見て Fine に
+選ばせても構いません。
 
 ## インストール
 
@@ -34,22 +44,20 @@ cd Fine
 ditto .build/Fine.app /Applications/Fine.app
 ```
 
-使いたいエージェントがあれば十分です。入っているものを Fine が見つけます。
+使いたいエージェントがあれば十分です。入っているものは Fine が見つけます。
 
 ## 設定
 
-設定画面もサインインもありません。アカウントはエージェントがそれぞれ持っていて、
-Fine にはかわりにコマンドラインがあります:
+設定画面もサインインもありません。アカウントは各エージェントが持っているからです。
+かわりにコマンドラインがあります。
 
 ```sh
-fine doctor          # 何が整っていて、何が足りず、それを埋めるコマンド
-fine appearance dark # すぐに反映されます
-fine tabs            # 何が開いているか
+fine doctor            # 何が整い、何が足りないか、そして埋める方法
+fine appearance dark   # すぐ反映されます
+fine tabs              # いま何が開いているか
 ```
 
 人が読んでもよく、コーディングエージェントがそのまま実行してもよいように
-作られています。
+書いてあります。手順は [`skills/fine-setup`](skills/fine-setup/SKILL.md) に。
 
-## ライセンス
-
-MIT
+<div align="center"><sub>MIT</sub></div>
