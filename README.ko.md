@@ -47,7 +47,8 @@ fine appearance dark # 바로 적용됩니다
 fine tabs            # 무엇이 열려 있나
 ```
 
-사람이 읽어도 되고, 코딩 에이전트가 그대로 실행해도 되게 만들었습니다.
+사람이 읽어도 되고, 코딩 에이전트가 그대로 실행해도 되게 만들었습니다 —
+에이전트가 따라갈 절차는 [`skills/fine-setup`](skills/fine-setup/SKILL.md)에 있습니다.
 
 ## 라이선스
 

@@ -48,7 +48,8 @@ fine appearance dark # applies immediately
 fine tabs            # what is open
 ```
 
-It is meant to be read and driven by a coding agent as much as by you.
+It is meant to be read and driven by a coding agent as much as by you — see
+[`skills/fine-setup`](skills/fine-setup/SKILL.md) for the procedure one would follow.
 
 ## License
 
