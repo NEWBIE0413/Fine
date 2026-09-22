@@ -613,7 +613,14 @@ enum OpenCodeModelDiscovery {
 }
 
 enum ClaudeCLIModelDiscovery {
-    static func discover(
+    /// 카탈로그 캐시가 있으면 그것이 정답이다. 없을 때만 예전 방식으로 떨어진다 —
+    /// 캐시를 쓰지 않던 CLI가 아직 남아 있을 수 있다.
+    static func discover() -> [QuickModelOption] {
+        let catalog = ClaudeModelCatalog.discover()
+        return catalog.isEmpty ? discoverByScanningBinary() : catalog
+    }
+
+    static func discoverByScanningBinary(
         executablePath: String? = nil,
         stringsPath: String = "/usr/bin/strings"
     ) -> [QuickModelOption] {

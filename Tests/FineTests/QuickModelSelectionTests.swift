@@ -318,11 +318,15 @@ final class QuickModelSelectionTests: XCTestCase {
         XCTAssertEqual(ClaudeCLIModelDiscovery.parseStringTable("claude-opus-5"), [])
     }
 
-    func testInstalledClaudeCatalogContainsOpus5() {
+    /// 설치된 CLI가 받아둔 카탈로그를 실제로 읽는지. 예전에는 바이너리를 긁었고,
+    /// 2.1.278에서 문자열 배치가 바뀌면서 이 검사가 깨져 있었다.
+    func testInstalledClaudeCatalogContainsOpus5() throws {
         let models = ClaudeCLIModelDiscovery.discover()
-        XCTAssertTrue(models.contains {
-            $0.id == "claude-opus-5" && $0.displayName == "Claude Opus 5"
-        })
+        try XCTSkipIf(models.isEmpty, "이 기기에 Claude Code 카탈로그 캐시가 없습니다")
+        let opus = try XCTUnwrap(models.first { $0.id == "claude-opus-5" })
+        XCTAssertEqual(opus.displayName, "Opus 5")
+        XCTAssertEqual(opus.harness, .claude)
+        XCTAssertTrue(opus.supportedEfforts.contains(.high))
     }
 }
 
@@ -403,5 +407,46 @@ extension OmpModelDiscoveryTests {
         XCTAssertEqual(OmpModelDiscovery.filtered(models, by: []).count, models.count)
         XCTAssertEqual(OmpModelDiscovery.filtered(models, by: ["nope/nothing"]).count, models.count)
         XCTAssertTrue(OmpModelDiscovery.parseEnabledModels("modelRoles:\n  default: x\n").isEmpty)
+    }
+}
+
+final class ClaudeModelCatalogTests: XCTestCase {
+    /// 실제 캐시 파일의 모양을 그대로 옮긴 것. 모델마다 effort가 다르다는 점이 핵심이다.
+    private let sample = """
+    {"version":2,"fetchedAt":1790086993251,"catalog":{"surface":"cc","config":{"id":"cc","models":[
+      {"id":"claude-opus-5","name":"Opus 5","section":"main",
+       "thinking":{"type":"effort","effort_options":[{"id":"low"},{"id":"medium"},{"id":"high"},{"id":"xhigh"},{"id":"max"}]}},
+      {"id":"claude-haiku-4-5-20251001","name":"Haiku 4.5","section":"main",
+       "thinking":{"type":"none"}},
+      {"id":"claude-sonnet-4-6","name":"Sonnet 4.6","section":"overflow",
+       "thinking":{"type":"effort","effort_options":[{"id":"max"},{"id":"low"},{"id":"medium"},{"id":"high"}]}}
+    ]}}}
+    """
+
+    func testCatalogGivesIdNameAndPerModelEfforts() throws {
+        let models = ClaudeModelCatalog.parse(Data(sample.utf8))
+        XCTAssertEqual(models.map(\.id),
+                       ["claude-opus-5", "claude-haiku-4-5-20251001", "claude-sonnet-4-6"])
+        XCTAssertEqual(models.map(\.displayName), ["Opus 5", "Haiku 4.5", "Sonnet 4.6"])
+        XCTAssertTrue(models.allSatisfy { $0.harness == .claude })
+    }
+
+    /// 깊이가 없는 모델은 빈 목록이어야 컴포저가 깊이 칸을 숨긴다.
+    /// 긁는 방식으로는 이것을 알 수 없어 전부 같은 기본값을 붙이고 있었다.
+    func testModelWithoutThinkingHasNoEfforts() throws {
+        let models = ClaudeModelCatalog.parse(Data(sample.utf8))
+        let haiku = try XCTUnwrap(models.first { $0.id.hasPrefix("claude-haiku") })
+        XCTAssertTrue(haiku.supportedEfforts.isEmpty)
+
+        let opus = try XCTUnwrap(models.first { $0.id == "claude-opus-5" })
+        XCTAssertEqual(opus.supportedEfforts, [.low, .medium, .high, .xhigh, .max])
+        // 4.6 계열에는 xhigh가 없다. 표의 순서가 아니라 축의 순서로 고정된다.
+        let sonnet = try XCTUnwrap(models.first { $0.id == "claude-sonnet-4-6" })
+        XCTAssertEqual(sonnet.supportedEfforts, [.low, .medium, .high, .max])
+    }
+
+    func testMalformedOrEmptyCatalogYieldsNothing() {
+        XCTAssertTrue(ClaudeModelCatalog.parse(Data("{}".utf8)).isEmpty)
+        XCTAssertTrue(ClaudeModelCatalog.parse(Data("not json".utf8)).isEmpty)
     }
 }
