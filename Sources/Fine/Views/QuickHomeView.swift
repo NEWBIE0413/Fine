@@ -116,9 +116,9 @@ struct QuickHomeView: View {
             Image(systemName: "arrow.up")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(trimmedPrompt.isEmpty ? Color.secondary : .white)
-                .frame(width: 34, height: 34)
+                .frame(width: FineTheme.compactControlHeight, height: FineTheme.compactControlHeight)
                 .background(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
                         .fill(trimmedPrompt.isEmpty
                             ? Color.black.opacity(0.05)
                             : Color(red: 0.22, green: 0.27, blue: 0.23))
@@ -168,9 +168,13 @@ struct QuickHomeView: View {
         Button {
             isModelPickerPresented.toggle()
         } label: {
-            pickerLabel(modelPickerTitle, icon: selectedModel.isAuto ? "wand.and.stars" : "sparkle")
+            FineControlPill(title: modelPickerTitle) {
+                Image(systemName: selectedModel.isAuto ? "wand.and.stars" : "sparkle")
+                    .font(.system(size: 10, weight: .semibold))
+            }
         }
         .buttonStyle(.finePress)
+        .fixedSize()
         .help(modelPickerHelp)
     }
 
@@ -233,27 +237,6 @@ struct QuickHomeView: View {
         if selectedModel.isDefault { return "기본 모드는 라우터 없이 터미널의 ccv와 똑같이 실행됩니다" }
         if selectedModel.requiresProxy { return "Codex, Kimi, Gemini, Alibaba 모델은 프록시 세션이 필수입니다" }
         return "세션 내 모델 전환 허용"
-    }
-
-    private func pickerLabel(_ title: String, icon: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-            Text(title).font(.system(size: 12, weight: .medium)).fineTracking(12).lineLimit(1)
-                .frame(maxWidth: 210, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 7, weight: .bold))
-                .foregroundColor(.secondary.opacity(0.65))
-        }
-        .foregroundColor(.primary.opacity(0.75))
-        .padding(.horizontal, 9)
-        .frame(height: FineTheme.compactControlHeight)
-        .background(
-            RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
-                .fill(FineTheme.controlFill)
-        )
-        .contentTransition(.numericText())
-        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1), value: title)
     }
 
     private var sessionModeDescription: String {

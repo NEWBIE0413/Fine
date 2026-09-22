@@ -125,7 +125,7 @@ struct QuickModelOption: Codable, Hashable, Identifiable, Sendable {
     static func defaultOption(for harness: QuickHarness) -> QuickModelOption {
         QuickModelOption(
             id: defaultID,
-            displayName: "기본 (터미널과 동일)",
+            displayName: "기본",
             supportedEfforts: [],
             harness: harness
         )

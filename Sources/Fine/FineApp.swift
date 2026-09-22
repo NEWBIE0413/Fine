@@ -14,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 저장된 외형을 창이 뜨기 전에 건다. SwiftUI의 preferredColorScheme만으로는
         // AppKit이 그리는 창 테두리·재질이 따라오지 않는다.
         MainActor.assumeIsolated { FineAppearance.apply(.stored) }
+        // 창은 이 시점 이후에 만들어진다. 한 번 더 맞춰야 첫 화면부터 저장된 외형이 된다.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { FineAppearance.apply(.stored) }
+        }
         startControlServer()
     }
 

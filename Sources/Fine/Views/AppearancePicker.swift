@@ -41,9 +41,16 @@ enum FineAppearance: String, CaseIterable, Identifiable {
     static let storageKey = "fineAppearance"
 
     /// 실행 직후와 값이 바뀔 때마다 호출한다.
+    ///
+    /// 앱 외형만 바꾸면 이미 떠 있는 창은 따라오지 않는다. SwiftUI의
+    /// `preferredColorScheme`이 창에 외형을 직접 박아두기 때문에, 그 창은 자기 값을
+    /// 계속 쓴다. 그래서 창들까지 명시적으로 지운다/맞춘다.
     @MainActor
     static func apply(_ appearance: FineAppearance) {
         NSApplication.shared.appearance = appearance.nsAppearance
+        for window in NSApplication.shared.windows {
+            window.appearance = appearance.nsAppearance
+        }
     }
 }
 
@@ -81,6 +88,9 @@ struct AppearanceToggle: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.finePress)
+        // 옆의 "새 대화" 버튼은 라벨 안에 Spacer가 있어 줄 전체를 가져간다.
+        // 고정 크기를 주지 않으면 이 토글의 폭이 0이 되어 아예 그려지지 않는다.
+        .fixedSize()
         .onHover { isHovering = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
         .help(isDark ? "밝게" : "어둡게")
