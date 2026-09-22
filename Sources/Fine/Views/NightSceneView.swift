@@ -10,18 +10,44 @@ import SwiftUI
 /// 중간쯤에서 바탕으로 녹아들어야 컴포저가 그 위에 뜬 것처럼 읽힌다.
 struct NightSceneView: View {
     var reduceMotion = false
+    /// 파일을 갈아끼우면 다음에 홈 화면을 열 때 반영된다.
+    @State private var userImage: NSImage? = NightSceneView.loadUserImage()
 
-    /// `Sources/Fine/HarnessIcons.xcassets/HomeScene.imageset`에 그림을 넣으면 그것을 쓴다.
-    /// 번들 에셋은 `NSImage(named:)`로는 안 잡히므로 모듈 번들에서 찾는다.
-    private static let hasArtwork = Bundle.module.image(forResource: "HomeScene") != nil
+    /// 배경 그림을 찾는 순서:
+    ///
+    /// 1. `~/.fine/home-scene.{png,jpg,jpeg,heic,webp}` — 파일만 두면 된다.
+    ///    빌드도, 저장소도 건드리지 않으므로 좋아하는 그림을 그냥 넣으면 된다.
+    /// 2. 번들의 `HomeScene` 에셋 — 빌드에 넣고 싶을 때. 저장소에는 올리지 않는다.
+    /// 3. 없으면 아래의 절차적 밤하늘.
+    ///
+    /// 저작권 있는 그림을 저장소에 넣지 않으려고 기본값을 절차적으로 둔다.
+    static var userSceneURL: URL? {
+        let directory = FinePaths.home
+        for name in ["home-scene.png", "home-scene.jpg", "home-scene.jpeg",
+                     "home-scene.heic", "home-scene.webp"] {
+            let url = directory.appendingPathComponent(name)
+            if FileManager.default.isReadableFile(atPath: url.path) { return url }
+        }
+        return nil
+    }
+
+    private static var bundledArtwork: Bool {
+        Bundle.module.image(forResource: "HomeScene") != nil
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let height = geometry.size.height
             Group {
-                if Self.hasArtwork {
+                if let image = userImage {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fill)
+                } else if Self.bundledArtwork {
                     Image("HomeScene", bundle: .module)
                         .resizable()
+                        .interpolation(.high)
                         .aspectRatio(contentMode: .fill)
                 } else {
                     ProceduralNightSky(reduceMotion: reduceMotion)
@@ -44,6 +70,12 @@ struct NightSceneView: View {
             )
             .frame(maxHeight: .infinity, alignment: .top)
         }
+        .onAppear { userImage = Self.loadUserImage() }
+    }
+
+    static func loadUserImage() -> NSImage? {
+        guard let url = userSceneURL else { return nil }
+        return NSImage(contentsOf: url)
     }
 }
 

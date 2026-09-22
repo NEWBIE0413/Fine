@@ -3,3 +3,7 @@
 .DS_Store
 .claude/
 RESTART-NOTE.md
+
+# 홈 화면 배경은 사용자가 직접 넣는 그림이다. 저장소에 올리지 않는다.
+# 보통은 ~/.fine/home-scene.png 에 두면 되고, 빌드에 넣고 싶을 때만 아래를 쓴다.
+Sources/Fine/HarnessIcons.xcassets/HomeScene.imageset/
