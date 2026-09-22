@@ -13,6 +13,10 @@ struct QuickHomeBackdrop: View {
         ZStack {
             if palette.isDark { darkBody(palette) } else { lightBody }
         }
+        // 배경이 그림이면 움직이는 것이 없다. 여섯 겹을 GPU에서 한 겹으로 합쳐
+        // 매 프레임 다시 합성하지 않게 한다. 절차적 하늘일 때는 매 프레임 달라지므로
+        // 평탄화가 오히려 비용이 된다.
+        .flattenedWhenStatic(NightSceneView.isStatic)
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -29,12 +33,13 @@ struct QuickHomeBackdrop: View {
             palette.sceneScrim
 
             // 컴포저가 앉는 자리 뒤에서 올라오는 빛. 유리에 두께가 생긴다.
+            // blendMode는 화면 전체를 오프스크린으로 한 번 더 그리게 만든다.
+            // 빛무리는 어두운 바탕 위라 더하기 합성이 아니어도 같은 인상이 난다.
             RadialGradient(
-                colors: [palette.bloom.opacity(0.34), palette.bloom.opacity(0.10), .clear],
+                colors: [palette.bloom.opacity(0.42), palette.bloom.opacity(0.12), .clear],
                 center: UnitPoint(x: 0.5, y: 0.56),
                 startRadius: 30, endRadius: 480
             )
-            .blendMode(.plusLighter)
 
             // 아래쪽을 바탕으로 눌러 장면이 끝나는 자리를 감춘다.
             LinearGradient(
@@ -100,14 +105,12 @@ struct QuickHomePresentation<Content: View>: View {
                         // 큰 글자는 자간을 조이고 행간을 좁혀야 한 덩어리로 읽힌다.
                         // 세리프는 문장에 무게를 주므로 인용에 맞고, 아래 출처는 산세리프로
                         // 낮춰 둘의 역할을 갈라놓는다.
-                        // 한글에는 기울임을 주지 않는다 — 합성 기울임이라 획이 뭉개진다.
                         Text(greetings.line)
-                            .font(.system(
-                                size: geometry.size.width < 620 ? 26 : 32,
-                                weight: .regular,
-                                design: .serif
+                            .font(FineDisplayFont.greeting(
+                                size: geometry.size.width < 620 ? 27 : 33,
+                                isDark: palette.isDark
                             ))
-                            .tracking(-0.8)
+                            .tracking(FineDisplayFont.greetingTracking(isDark: palette.isDark))
                             .lineSpacing(4)
                             .foregroundStyle(palette.ink)
                             .frame(maxWidth: 560)
@@ -243,6 +246,19 @@ struct QuickHomeControls<Harness: View, Options: View, Send: View>: View {
                     send
                 }
             }
+        }
+    }
+}
+
+
+private extension View {
+    /// 조건부로 한 겹으로 합친다. `.disabled`는 상호작용만 막을 뿐 그리기에는 영향이 없다.
+    @ViewBuilder
+    func flattenedWhenStatic(_ flatten: Bool) -> some View {
+        if flatten {
+            drawingGroup(opaque: false, colorMode: .nonLinear)
+        } else {
+            self
         }
     }
 }

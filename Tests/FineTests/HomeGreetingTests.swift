@@ -53,3 +53,21 @@ final class HomeGreetingTests: XCTestCase {
         )
     }
 }
+
+extension HomeGreetingTests {
+    /// 대화 목록은 비동기로 도착한다. 비어 있는 첫 호출에서 결정을 잠그면
+    /// 목록이 온 뒤에도 "빈 페이지부터"가 남는다.
+    @MainActor
+    func testEmptyFirstPassDoesNotLockTheGreeting() {
+        let picker = HomeGreetingPicker()
+        picker.refreshIfNeeded(conversations: [])
+        XCTAssertEqual(picker.line, HomeGreeting.startFresh.template)
+
+        let arrived = [QuickConversation(
+            id: UUID().uuidString, title: "이미지 분석", aiTitle: nil,
+            modifiedAt: Date().addingTimeInterval(-600), transcriptURL: nil, harness: .claude
+        )]
+        picker.refreshIfNeeded(conversations: arrived)
+        XCTAssertEqual(picker.line, "「이미지 분석」, 이어서 해볼까요?")
+    }
+}

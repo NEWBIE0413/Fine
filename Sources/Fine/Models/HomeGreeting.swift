@@ -119,9 +119,18 @@ final class HomeGreetingPicker: ObservableObject {
     private var resolved = false
 
     func refreshIfNeeded(conversations: [QuickConversation]) {
-        note = Self.note(for: conversations)
+        // 스캐너는 주기적으로 발행한다. 같은 값을 다시 쓰면 홈 화면이 통째로 다시 그려진다.
+        let freshNote = Self.note(for: conversations)
+        if freshNote != note { note = freshNote }
         title = Self.mentionableTitle(from: conversations)
         guard !resolved else { return }
+        // 대화 목록은 뒤늦게 도착한다. 비어 있는 첫 호출에서 잠가버리면
+        // 목록이 실제로 비었을 때의 문장("빈 페이지부터")이 영영 굳는다.
+        // 목록이 끝내 비어 있으면 그 문장이 맞으므로, 그대로 두고 잠그지만 않는다.
+        guard !conversations.isEmpty else {
+            line = HomeGreeting.startFresh.template
+            return
+        }
         resolved = true
         line = HomeGreeting.byFacts(conversations).rendered(title: title)
         Task { await resolveStuck(conversations: conversations) }

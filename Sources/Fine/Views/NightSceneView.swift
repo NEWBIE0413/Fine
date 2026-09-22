@@ -42,6 +42,11 @@ struct NightSceneView: View {
         "home-scene.heic", "home-scene.webp",
     ]
 
+    /// 그림이 깔려 있으면 배경에 움직이는 것이 없다 — 그때만 한 겹으로 평탄화할 수 있다.
+    static var isStatic: Bool {
+        userSceneURL != nil || bundledArtwork
+    }
+
     private static var bundledArtwork: Bool {
         Bundle.module.image(forResource: "HomeScene") != nil
     }
@@ -86,13 +91,28 @@ struct NightSceneView: View {
     private func sceneImage(_ image: Image) -> some View {
         image
             .resizable()
-            .interpolation(.high)
             .aspectRatio(contentMode: .fill)
     }
 
+    /// 화면이 아무리 넓어도 이 폭이면 충분하다. 원본을 그대로 들고 있으면
+    /// 매 프레임 고품질 보간으로 다시 줄이게 된다.
+    private static let maxSceneWidth: CGFloat = 1800
+
     static func loadUserImage() -> NSImage? {
-        guard let url = userSceneURL else { return nil }
-        return NSImage(contentsOf: url)
+        guard let url = userSceneURL, let image = NSImage(contentsOf: url) else { return nil }
+        return downsampled(image)
+    }
+
+    private static func downsampled(_ image: NSImage) -> NSImage {
+        guard image.size.width > maxSceneWidth else { return image }
+        let scale = maxSceneWidth / image.size.width
+        let size = NSSize(width: maxSceneWidth, height: (image.size.height * scale).rounded())
+        let resized = NSImage(size: size)
+        resized.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: NSRect(origin: .zero, size: size))
+        resized.unlockFocus()
+        return resized
     }
 }
 

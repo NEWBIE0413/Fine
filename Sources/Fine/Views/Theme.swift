@@ -30,6 +30,23 @@ enum FineTheme {
     static let glassEdge = Color.black.opacity(0.08)
 }
 
+/// 인사말처럼 큰 글자의 서체. 밝은 쪽에는 세리프가 어울리지만 어두운 쪽에서는
+/// 가는 세리프 획이 배경에 먹혀 지저분해진다. 그쪽은 산세리프로 간다.
+///
+/// Pretendard가 깔려 있으면 그것을 쓰고, 없으면 시스템 서체로 떨어진다 —
+/// `Font.custom`은 이름을 못 찾으면 조용히 시스템으로 돌아간다.
+enum FineDisplayFont {
+    static func greeting(size: CGFloat, isDark: Bool) -> Font {
+        guard isDark else {
+            return .system(size: size, weight: .regular, design: .serif)
+        }
+        return .custom("Pretendard-Medium", size: size)
+    }
+
+    /// 세리프는 같은 크기에서 더 크게 읽히고 자간도 더 조여야 한다.
+    static func greetingTracking(isDark: Bool) -> CGFloat { isDark ? -0.9 : -0.5 }
+}
+
 /// 누르는 순간 반응한다. 놓을 때까지 기다리면 직접 만지는 느낌이 사라진다.
 /// 스프링은 critically damped — 버튼은 튕길 이유가 없다.
 struct FinePressStyle: ButtonStyle {
