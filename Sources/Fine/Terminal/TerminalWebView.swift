@@ -221,6 +221,14 @@ final class TerminalWebView: NSView {
         }
     }
 
+    /// xterm이 실제로 들고 있는 색. 화면만 보고는 테마가 닿았는지 알 수 없다.
+    func readTheme(completion: @escaping (String?) -> Void) {
+        guard isReady else { completion(nil); return }
+        webView.evaluateJavaScript("window.smThemeReport && window.smThemeReport()") { result, _ in
+            completion(result as? String)
+        }
+    }
+
     func focusTerminal() {
         window?.makeFirstResponder(webView)
         webView.evaluateJavaScript("window.smFocus()", completionHandler: nil)

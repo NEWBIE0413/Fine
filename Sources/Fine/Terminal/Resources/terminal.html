@@ -271,6 +271,21 @@
     term.options.theme = theme;
     document.documentElement.style.setProperty('--term-bg', theme.background);
     document.documentElement.style.setProperty('--term-fg', theme.foreground);
+    /* WebGL 렌더러는 붙을 때의 색을 들고 있다. 테마만 바꾸면 화면은 그대로이므로
+       전체를 다시 그리게 한다. */
+    try { term.refresh(0, term.rows - 1); } catch (e) { /* 아직 열리기 전이면 무시한다. */ }
+  };
+
+  /* 지금 xterm이 실제로 쓰고 있는 선택 색. 눈으로 못 보는 것을 확인하기 위한 통로다. */
+  window.smThemeReport = function () {
+    var t = term.options.theme || {};
+    return JSON.stringify({
+      background: t.background, foreground: t.foreground,
+      selectionBackground: t.selectionBackground,
+      selectionInactiveBackground: t.selectionInactiveBackground,
+      selectionForeground: t.selectionForeground,
+      minimumContrastRatio: term.options.minimumContrastRatio,
+    });
   };
 
   post('ready', { cols: term.cols, rows: term.rows });

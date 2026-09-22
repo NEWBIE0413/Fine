@@ -330,6 +330,11 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         terminalView.readScreen(lines: lines, completion: completion)
     }
 
+    func readTheme(completion: @escaping (String?) -> Void) {
+        guard let terminalView else { completion(nil); return }
+        terminalView.readTheme(completion: completion)
+    }
+
     func focusTerminal() {
         DispatchQueue.main.async { [weak self] in self?.terminalView?.focusTerminal() }
     }

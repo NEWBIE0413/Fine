@@ -168,7 +168,7 @@ enum ControlCommands {
             let data = try JSONEncoder.pretty.encode(WindowStateStorage.shared.states)
             return try JSONSerialization.jsonObject(with: data)
 
-        case "conversations.list", "models.list", "session.new", "session.resume", "window.new", "tab.read", "tab.transcript":
+        case "conversations.list", "models.list", "session.new", "session.resume", "window.new", "tab.read", "tab.theme", "tab.transcript":
             throw fail("internal: async command reached sync dispatcher")
         default:
             throw fail("unknown command: \(r.command)")
@@ -184,6 +184,14 @@ enum ControlCommands {
         case "window.new":
             openWindow { entry in
                 completion(entry.map { .ok(describe($0, index: liveWindows().count - 1)) } ?? .error("window did not appear"))
+            }
+            return true
+
+        case "tab.theme":
+            let (_, _, session, _) = try tab(r)
+            guard session.hasTerminal else { throw fail("tab has no terminal yet (not started)") }
+            session.readTheme { text in
+                completion(text.map { .ok(["theme": $0]) } ?? .error("terminal not ready"))
             }
             return true
 
