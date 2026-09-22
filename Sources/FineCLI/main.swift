@@ -39,6 +39,7 @@ fine — Fine을 터미널에서 조작한다
   fine models [--harness H]                 하네스가 아는 모델·effort
   fine state                                window-states.json 덤프
   fine appearance [system|light|dark]       외형 조회/변경 (즉시 적용)
+  fine doctor                               준비 상태와 빠진 것을 채우는 명령
   fine ping
 
 옵션: --json (원본 JSON), -w/--window <index|id 접두사|front>, --no-focus
@@ -197,6 +198,7 @@ do {
         if let mode = sub { args["mode"] = mode }
     case ("home", _): command = "home"
     case ("models", _): command = "models.list"
+    case ("doctor", _): command = "doctor"
     case ("state", _): command = "state.dump"
     default: throw CLIError(message: "unknown command: \(positional.joined(separator: " "))\n\n\(usage)")
     }

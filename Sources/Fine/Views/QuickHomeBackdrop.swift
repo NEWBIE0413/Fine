@@ -13,10 +13,10 @@ struct QuickHomeBackdrop: View {
         ZStack {
             if palette.isDark { darkBody(palette) } else { lightBody }
         }
-        // 배경이 그림이면 움직이는 것이 없다. 여섯 겹을 GPU에서 한 겹으로 합쳐
-        // 매 프레임 다시 합성하지 않게 한다. 절차적 하늘일 때는 매 프레임 달라지므로
-        // 평탄화가 오히려 비용이 된다.
-        .flattenedWhenStatic(NightSceneView.isStatic)
+        // 어두운 테마에 그림이 깔렸을 때만 평탄화한다. 그때만 배경에 움직이는 것이 없다.
+        // 밝은 테마는 그림과 무관하게 ASCII 풍경이 계속 움직이고, 그것을 래스터화하면
+        // 글자 획이 뭉개져 블록처럼 보인다.
+        .flattenedWhenStatic(palette.isDark && NightSceneView.isStatic)
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)

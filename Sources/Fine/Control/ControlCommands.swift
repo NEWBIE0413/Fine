@@ -161,6 +161,9 @@ enum ControlCommands {
                 },
             ]
 
+        case "doctor":
+            return FineDoctor.run()
+
         case "state.dump":
             let data = try JSONEncoder.pretty.encode(WindowStateStorage.shared.states)
             return try JSONSerialization.jsonObject(with: data)

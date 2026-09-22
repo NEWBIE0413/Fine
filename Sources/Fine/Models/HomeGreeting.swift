@@ -56,7 +56,8 @@ struct HomeGreeting: Equatable {
     static let finished = HomeGreeting(template: "{title}은/는 잘 마무리됐나요?")
     static let ongoing = HomeGreeting(template: "{title}, 이어서 해볼까요?")
     static let stuck = HomeGreeting(template: "{title}이/가 아직 안 풀렸군요.")
-    static let scattered = HomeGreeting(template: "벌여둔 일이 많네요.")
+    // 여러 개가 열려 있다는 사실을 나무라듯 말하지 않는다. 어디부터 볼지 묻는다.
+    static let scattered = HomeGreeting(template: "오늘은 어디부터 볼까요?")
     static let startFresh = HomeGreeting(template: "빈 페이지부터.")
 
     static let candidates: [HomeGreeting] = [finished, ongoing, stuck, scattered, startFresh]
