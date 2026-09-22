@@ -56,11 +56,17 @@ struct HomeGreeting: Equatable {
     static let finished = HomeGreeting(template: "{title}은/는 잘 마무리됐나요?")
     static let ongoing = HomeGreeting(template: "{title}, 이어서 해볼까요?")
     static let stuck = HomeGreeting(template: "{title}이/가 아직 안 풀렸군요.")
-    // 여러 개가 열려 있다는 사실을 나무라듯 말하지 않는다. 어디부터 볼지 묻는다.
+    static let shipping = HomeGreeting(template: "{title}, 오늘 끝내볼까요?")
+    static let writing = HomeGreeting(template: "{title}, 이어서 써볼까요?")
+    /// 개인적인 일은 끝난 뒤에 묻는 말과 진행 중에 묻는 말이 다르다.
+    static let personalPast = HomeGreeting(template: "{title}은/는 잘 다녀오셨어요?")
+    static let personalNow = HomeGreeting(template: "{title}은/는 어떻게 돼가요?")
     static let scattered = HomeGreeting(template: "오늘은 어디부터 볼까요?")
     static let startFresh = HomeGreeting(template: "빈 페이지부터.")
 
-    static let candidates: [HomeGreeting] = [finished, ongoing, stuck, scattered, startFresh]
+    static let candidates: [HomeGreeting] = [
+        finished, ongoing, stuck, shipping, writing, personalPast, personalNow, scattered, startFresh,
+    ]
 
     /// 사실만으로 고른다. 제목의 뜻은 보지 않는다 — 그건 kev의 몫이다.
     static func byFacts(_ conversations: [QuickConversation], now: Date = Date()) -> HomeGreeting {
@@ -114,16 +120,19 @@ final class HomeGreetingPicker: ObservableObject {
     @Published private(set) var note: String = ""
 
     private var title: String?
+    /// kev에게 보여줄 제목 묶음. 열린 탭이 있으면 그쪽을 먼저 쓴다.
+    private var titles = ""
 
     /// 한 번 고르면 세션 내내 유지한다. 홈으로 돌아올 때마다 문장이 바뀌면
     /// 읽는 자리가 아니라 깜빡이는 자리가 된다.
     private var resolved = false
 
-    func refreshIfNeeded(conversations: [QuickConversation]) {
+    func refreshIfNeeded(conversations: [QuickConversation], openTabs: [String] = []) {
         // 스캐너는 주기적으로 발행한다. 같은 값을 다시 쓰면 홈 화면이 통째로 다시 그려진다.
         let freshNote = Self.note(for: conversations)
         if freshNote != note { note = freshNote }
-        title = Self.mentionableTitle(from: conversations)
+        title = Self.mentionableTitle(from: conversations, openTabs: openTabs)
+        titles = Self.titles(conversations: conversations, openTabs: openTabs)
         guard !resolved else { return }
         // 대화 목록은 뒤늦게 도착한다. 비어 있는 첫 호출에서 잠가버리면
         // 목록이 실제로 비었을 때의 문장("빈 페이지부터")이 영영 굳는다.
@@ -134,25 +143,51 @@ final class HomeGreetingPicker: ObservableObject {
         }
         resolved = true
         line = HomeGreeting.byFacts(conversations).rendered(title: title)
-        Task { await resolveStuck(conversations: conversations) }
+        Task { await resolveReading(conversations: conversations) }
     }
 
 
-    /// 제목이 안 풀린 일을 가리키면 그 문장으로 바꾼다. 아니면 사실로 고른 것을 그대로 둔다.
-    private func resolveStuck(conversations: [QuickConversation]) async {
-        guard !conversations.isEmpty else { return }
-        let titles = conversations.prefix(6)
-            .map { ($0.aiTitle ?? $0.title).prefix(60) }
-            .joined(separator: "; ")
-        guard let probability = await Self.askStuck(titles: String(titles)),
-              probability >= 0.6 else { return }
-        line = HomeGreeting.stuck.rendered(title: title)
+    /// 제목의 성격을 읽어 문장을 고른다. 사실(언제·몇 개)은 이미 반영돼 있고,
+    /// 여기서는 kev만 답할 수 있는 것 — 그 일이 어떤 종류인가 — 을 얹는다.
+    private func resolveReading(conversations: [QuickConversation]) async {
+        guard !titles.isEmpty else { return }
+        guard let reading = await Self.askReading(titles: titles) else { return }
+        guard let bucket = reading.strongest() else { return }
+        let stale = Self.isStale(conversations)
+        let greeting: HomeGreeting
+        switch bucket {
+        case "stuck": greeting = .stuck
+        case "shipping": greeting = .shipping
+        case "writing": greeting = .writing
+        // 개인적인 일은 끝난 뒤와 진행 중에 묻는 말이 다르다. 그 구분은 날짜가 안다.
+        case "personal": greeting = stale ? .personalPast : .personalNow
+        default: return
+        }
+        line = greeting.rendered(title: title)
+    }
+
+    static func isStale(_ conversations: [QuickConversation], now: Date = Date()) -> Bool {
+        guard let newest = conversations.first else { return false }
+        return now.timeIntervalSince(newest.modifiedAt) / 86_400 >= 1
+    }
+
+    /// 지금 열어둔 탭이 있으면 그 이름을 쓴다. 최근 목록은 과거고, 열린 탭은 현재다.
+    static func titles(conversations: [QuickConversation], openTabs: [String]) -> String {
+        let names = openTabs.isEmpty
+            ? conversations.prefix(6).map { $0.aiTitle ?? $0.title }
+            : Array(openTabs.prefix(6))
+        guard let first = names.first else { return "" }
+        let rest = names.dropFirst().joined(separator: "; ")
+        return rest.isEmpty
+            ? "The active conversation is titled: \(first)."
+            : "The active conversation is titled: \(first). Other open ones: \(rest)"
     }
 
     /// 문장에 넣어도 읽히는 제목만 쓴다. 너무 길면 한 줄이 문장이 아니라 목록이 된다.
-    static func mentionableTitle(from conversations: [QuickConversation]) -> String? {
-        guard let newest = conversations.first else { return nil }
-        let raw = (newest.aiTitle ?? newest.title).trimmingCharacters(in: .whitespacesAndNewlines)
+    static func mentionableTitle(from conversations: [QuickConversation], openTabs: [String] = []) -> String? {
+        let candidate = openTabs.first ?? conversations.first.map { $0.aiTitle ?? $0.title }
+        guard let candidate else { return nil }
+        let raw = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty, raw.count <= 24 else { return nil }
         return raw
     }
@@ -164,17 +199,39 @@ final class HomeGreetingPicker: ObservableObject {
         return "최근 대화 \(conversations.count)개 · \(age)"
     }
 
-    /// QuickAutoRouter와 같은 서버·같은 요청 모양이다. 다른 것은 질문 하나뿐이다.
-    static func askStuck(titles: String) async -> Double? {
+    /// 제목이 어떤 성격인지. 전부 예/아니오다 — 6지선다는 이 모델이 못 한다(실측).
+    struct Reading {
+        var stuck = 0.0
+        var personal = 0.0
+        var writing = 0.0
+        var shipping = 0.0
+
+        /// 가장 센 신호 하나만 쓴다. 둘 다 애매하면 아무것도 고르지 않는다.
+        func strongest(threshold: Double = 0.6) -> String? {
+            let scored = [("stuck", stuck), ("shipping", shipping),
+                          ("personal", personal), ("writing", writing)]
+            guard let top = scored.max(by: { $0.1 < $1.1 }), top.1 >= threshold else { return nil }
+            return top.0
+        }
+    }
+
+    /// QuickAutoRouter와 같은 서버·같은 요청 모양이다. 질문 넷이 forward pass 하나를
+    /// 나눠 쓰므로, 하나만 물을 때와 비용이 사실상 같다 (실측 64ms).
+    static func askReading(titles: String) async -> Reading? {
         let body: [String: Any] = [
             "model": "kev-latest",
-            "state": "Recent conversation titles: \(titles)",
+            "state": titles,
             "questions": [
-                "stuck": [
-                    "type": "noul",
-                    "instructions": "Do these conversation titles describe something broken, "
-                        + "failing, or not yet working?",
-                ],
+                "stuck": ["type": "noul", "instructions":
+                    "Do these titles describe something broken, failing, or not yet working?"],
+                "personal": ["type": "noul", "instructions":
+                    "Are these titles about travel, food, errands or personal life "
+                        + "rather than software work?"],
+                "writing": ["type": "noul", "instructions":
+                    "Are these titles about writing, reading, research or documents "
+                        + "rather than building software?"],
+                "shipping": ["type": "noul", "instructions":
+                    "Do these titles describe finishing, releasing or shipping something?"],
             ],
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return nil }
@@ -187,8 +244,13 @@ final class HomeGreetingPicker: ObservableObject {
         guard let (responseData, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-              let answers = json["answers"] as? [String: Any],
-              let stuck = (answers["stuck"] as? [String: Any])?["noul"] as? Double else { return nil }
-        return stuck
+              let answers = json["answers"] as? [String: Any] else { return nil }
+        func value(_ key: String) -> Double {
+            (answers[key] as? [String: Any])?["noul"] as? Double ?? 0
+        }
+        return Reading(
+            stuck: value("stuck"), personal: value("personal"),
+            writing: value("writing"), shipping: value("shipping")
+        )
     }
 }

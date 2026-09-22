@@ -20,7 +20,7 @@ struct QuickHomeView: View {
     }
 
     var body: some View {
-        QuickHomePresentation {
+        QuickHomePresentation(openTabs: appState.sessions.map(\.name)) {
             VStack(spacing: 14) {
                 QuickHomeComposer(prompt: $prompt, onSubmit: submit) {
                     composerControls

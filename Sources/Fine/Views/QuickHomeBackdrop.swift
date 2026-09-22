@@ -90,6 +90,8 @@ struct QuickHomeBackdrop: View {
 
 /// Home-only composition: the terminal and navigation keep their own surfaces.
 struct QuickHomePresentation<Content: View>: View {
+    /// 열린 탭 이름. 기본값을 둬서 렌더 테스트가 AppState 없이도 그릴 수 있게 한다.
+    var openTabs: [String] = []
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var greetings = HomeGreetingPicker.shared
     @ObservedObject private var scanner = QuickConversationScanner.shared
@@ -135,9 +137,11 @@ struct QuickHomePresentation<Content: View>: View {
             .scrollIndicators(.hidden)
         }
         .background(QuickHomeBackdrop())
-        .onAppear { greetings.refreshIfNeeded(conversations: scanner.conversations) }
+        .onAppear {
+            greetings.refreshIfNeeded(conversations: scanner.conversations, openTabs: openTabs)
+        }
         .onChange(of: scanner.conversations) { _, list in
-            greetings.refreshIfNeeded(conversations: list)
+            greetings.refreshIfNeeded(conversations: list, openTabs: openTabs)
         }
     }
 }
