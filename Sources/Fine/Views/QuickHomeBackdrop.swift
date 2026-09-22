@@ -25,6 +25,9 @@ struct QuickHomeBackdrop: View {
         if !reduceTransparency {
             NightSceneView(reduceMotion: reduceMotion)
 
+            // 그림이 밝으면 제목과 컴포저가 묻힌다. 장면만 한 단 가라앉힌다.
+            palette.sceneScrim
+
             // 컴포저가 앉는 자리 뒤에서 올라오는 빛. 유리에 두께가 생긴다.
             RadialGradient(
                 colors: [palette.bloom.opacity(0.34), palette.bloom.opacity(0.10), .clear],

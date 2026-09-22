@@ -155,3 +155,14 @@ extension AppearanceDiagnosticTests {
         XCTAssertEqual(NightSceneView.sceneFilenames.first, "home-scene.png")
     }
 }
+
+extension AppearanceDiagnosticTests {
+    /// 사이드바는 작업부보다 어두워야 한다 — 뒤로 물러나는 면이기 때문이다.
+    /// 밝은 테마에서는 반대로 유리가 종이보다 밝으므로 막을 씌우지 않는다.
+    func testSidebarSitsBelowTheWorkspaceInDarkOnly() {
+        XCTAssertEqual(FinePalette.light.sidebarTint, .clear)
+        XCTAssertNotEqual(FinePalette.dark.sidebarTint, .clear)
+        XCTAssertEqual(FinePalette.light.sceneScrim, .clear)
+        XCTAssertNotEqual(FinePalette.dark.sceneScrim, .clear)
+    }
+}

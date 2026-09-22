@@ -69,6 +69,9 @@ struct GlassSidebarBackground: View {
             Rectangle()
                 .fill(.ultraThinMaterial)
 
+            // 밝은 쪽에서는 유리가 종이보다 밝지만, 어두운 쪽에서는 반대여야 한다.
+            Rectangle().fill(FinePalette.resolve(colorScheme).sidebarTint)
+
             LinearGradient(
                 colors: [
                     FineTheme.glassSheenTop.opacity(sheen),
@@ -127,6 +130,10 @@ struct FinePalette {
     /// 컴포저 뒤에서 은은하게 올라오는 빛. 짙은 블루.
     let bloom: Color
     let shadow: Color
+    /// 사이드바는 작업부보다 한 단 어두워야 한다 — 뒤로 물러나는 면이기 때문이다.
+    let sidebarTint: Color
+    /// 장면 위에 덮는 막. 그림이 밝으면 글자가 묻힌다.
+    let sceneScrim: Color
 
     static let light = FinePalette(
         isDark: false,
@@ -138,7 +145,9 @@ struct FinePalette {
         controlFill: .black.opacity(0.05),
         divider: .black.opacity(0.07),
         bloom: .clear,
-        shadow: Color(red: 0.27, green: 0.30, blue: 0.26).opacity(0.07)
+        shadow: Color(red: 0.27, green: 0.30, blue: 0.26).opacity(0.07),
+        sidebarTint: .clear,
+        sceneScrim: .clear
     )
 
     /// 짙은 블루 계열. 순검정이 아니라 푸른 기를 남겨야 장면과 바탕이 한 몸으로 읽힌다.
@@ -152,7 +161,9 @@ struct FinePalette {
         controlFill: .white.opacity(0.08),
         divider: .white.opacity(0.09),
         bloom: Color(red: 0.16, green: 0.30, blue: 0.72),
-        shadow: .black.opacity(0.55)
+        shadow: .black.opacity(0.55),
+        sidebarTint: .black.opacity(0.42),
+        sceneScrim: .black.opacity(0.30)
     )
 
     static func resolve(_ scheme: ColorScheme) -> FinePalette {
