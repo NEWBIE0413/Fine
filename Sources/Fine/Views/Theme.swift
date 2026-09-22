@@ -64,7 +64,7 @@ struct GlassSidebarBackground: View {
 
     var body: some View {
         // 어두운 쪽에서는 흰 광택이 뿌옇게 뜬다. 같은 구조에 세기만 낮춘다.
-        let sheen = colorScheme == .dark ? 0.28 : 1.0
+        let sheen = colorScheme == .dark ? 0.10 : 1.0
         ZStack(alignment: .trailing) {
             Rectangle()
                 .fill(.ultraThinMaterial)
@@ -162,7 +162,7 @@ struct FinePalette {
         divider: .white.opacity(0.09),
         bloom: Color(red: 0.16, green: 0.30, blue: 0.72),
         shadow: .black.opacity(0.55),
-        sidebarTint: .black.opacity(0.42),
+        sidebarTint: .black.opacity(0.74),
         sceneScrim: .black.opacity(0.30)
     )
 
