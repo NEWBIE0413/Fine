@@ -67,3 +67,23 @@ extension TerminalThemeTests {
         XCTAssertEqual(dark.minimumContrastRatio, 4.5)
     }
 }
+
+extension TerminalThemeTests {
+    /// 상태줄은 xterm 밖에서 CSS가 그린다. 팔레트가 자기 밝기를 들고 있어야 같이 뒤집힌다.
+    func testPaletteCarriesItsSchemeForChromeOutsideXterm() {
+        XCTAssertFalse(TerminalPalette.forHarness(.claude, isDark: false).isDark)
+        XCTAssertFalse(TerminalPalette.forHarness(.codex, isDark: false).isDark)
+        XCTAssertTrue(TerminalPalette.forHarness(.claude, isDark: true).isDark)
+        XCTAssertTrue(TerminalPalette.forHarness(.omp, isDark: true).isDark)
+    }
+
+    /// 터미널 바탕은 홈의 남색이 아니라 중립적인 짙은 회색이어야 한다.
+    func testDarkTerminalBackgroundIsNeutralGrey() throws {
+        let hex = try XCTUnwrap(TerminalPalette.forHarness(.codex, isDark: true).colors["background"])
+        let value = try XCTUnwrap(Int(hex.dropFirst(), radix: 16))
+        let r = (value >> 16) & 0xff, g = (value >> 8) & 0xff, b = value & 0xff
+        // 채널이 서로 가까워야 중립이다. 남색이면 파랑이 빨강보다 한참 높다.
+        XCTAssertLessThanOrEqual(abs(r - b), 6, "배경에 색이 돈다: \(hex)")
+        XCTAssertLessThanOrEqual(abs(r - g), 6, "배경에 색이 돈다: \(hex)")
+    }
+}

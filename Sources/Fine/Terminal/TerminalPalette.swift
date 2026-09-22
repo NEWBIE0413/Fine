@@ -4,6 +4,8 @@ import Foundation
 struct TerminalPalette: Equatable {
     let colors: [String: String]
     var minimumContrastRatio: Double = 1
+    /// 상태줄처럼 xterm 밖에서 그리는 장식도 같이 뒤집어야 한다.
+    var isDark: Bool = false
 
     /// Fine 라이트 모드에서는 ANSI 장식색도 모두 검정으로 고정한다.
     /// Claude의 전체 화면 재도장 순서에 따라 글자색이 오가는 시각 회귀를 막는다.
@@ -44,38 +46,38 @@ struct TerminalPalette: Equatable {
     /// 색을 살리지 않는 이유는 라이트와 같다 — Claude의 전체 화면 재도장에서
     /// 글자색이 오가는 시각 회귀를 막는다.
     ///
-    /// 바탕은 순검정이 아니라 홈 화면과 같은 푸른 기의 검정이다. 창 안에서 터미널만
-    /// 다른 검정이면 두 면이 따로 논다.
+    /// 바탕은 작업부와 같은 짙은 회색이다. 홈 화면의 남색을 여기까지 끌고 오면
+    /// 글을 읽는 면에 색이 돌아 눈이 피로하다 — 배경은 배경답게 중립이어야 한다.
     static let quickDark = TerminalPalette(colors: [
-        "background": "#0a0d15",
-        "foreground": "#e6eaf5",
-        "cursor": "#e6eaf5",
-        "cursorAccent": "#0a0d15",
-        "selectionBackground": "#26406b",
-        "black": "#e6eaf5",
-        "red": "#e6eaf5",
-        "green": "#e6eaf5",
-        "yellow": "#e6eaf5",
-        "blue": "#e6eaf5",
-        "magenta": "#e6eaf5",
-        "cyan": "#e6eaf5",
-        "white": "#e6eaf5",
-        "brightBlack": "#e6eaf5",
-        "brightRed": "#e6eaf5",
-        "brightGreen": "#e6eaf5",
-        "brightYellow": "#e6eaf5",
-        "brightBlue": "#e6eaf5",
-        "brightMagenta": "#e6eaf5",
-        "brightCyan": "#e6eaf5",
-        "brightWhite": "#e6eaf5",
-    ])
+        "background": "#1e1e1e",
+        "foreground": "#e8e8e8",
+        "cursor": "#e8e8e8",
+        "cursorAccent": "#1e1e1e",
+        "selectionBackground": "#2f4a72",
+        "black": "#e8e8e8",
+        "red": "#e8e8e8",
+        "green": "#e8e8e8",
+        "yellow": "#e8e8e8",
+        "blue": "#e8e8e8",
+        "magenta": "#e8e8e8",
+        "cyan": "#e8e8e8",
+        "white": "#e8e8e8",
+        "brightBlack": "#e8e8e8",
+        "brightRed": "#e8e8e8",
+        "brightGreen": "#e8e8e8",
+        "brightYellow": "#e8e8e8",
+        "brightBlue": "#e8e8e8",
+        "brightMagenta": "#e8e8e8",
+        "brightCyan": "#e8e8e8",
+        "brightWhite": "#e8e8e8",
+    ], isDark: true)
 
     /// 라이트에서 제출된 프롬프트 바탕이 흰 바탕보다 조금 어두운 면이듯,
     /// 다크에서는 검은 바탕보다 조금 밝은 면이어야 한다.
     static let claudeDark: TerminalPalette = {
         var colors = quickDark.colors
-        colors["brightBlack"] = "#1b2130"
-        return TerminalPalette(colors: colors, minimumContrastRatio: 4.5)
+        colors["brightBlack"] = "#2c2c2e"
+        return TerminalPalette(colors: colors, minimumContrastRatio: 4.5, isDark: true)
     }()
 
     static func forHarness(_ harness: QuickHarness, isDark: Bool = false) -> TerminalPalette {

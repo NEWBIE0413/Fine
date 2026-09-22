@@ -268,6 +268,11 @@ final class TerminalWebView: NSView {
 
     /// 전체 ANSI 팔레트는 TerminalPalette 한 경로에서 갱신한다.
     private func applyTheme() {
+        // xterm 밖의 장식(상태줄)은 CSS가 그린다. 밝기를 먼저 알려야 같이 뒤집힌다.
+        webView.evaluateJavaScript(
+            "window.smSetScheme && window.smSetScheme(\(palette.isDark))",
+            completionHandler: nil
+        )
         guard let theme = palette.json else { return }
         let contrast = palette.minimumContrastRatio > 1 ? ", \(palette.minimumContrastRatio)" : ""
         webView.evaluateJavaScript("window.smSetTheme(\(theme)\(contrast))", completionHandler: nil)

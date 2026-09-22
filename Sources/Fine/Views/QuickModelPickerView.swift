@@ -210,10 +210,12 @@ struct QuickModelPickerView: View {
     }
 
     private func select(_ model: QuickModelOption) {
+        // 닫을지 말지는 "방금 고른 모델"로 판단해야 한다. selectedModelID에 쓴 값은
+        // 아직 반영되기 전이라, 직전 모델(예: 깊이가 없는 "기본")을 기준으로 삼으면
+        // 깊이가 있는 모델을 골라도 패널이 곧바로 닫혀 깊이를 고를 기회가 사라진다.
+        let offersEffort = selectedEffort != nil && !model.isAuto && !model.supportedEfforts.isEmpty
         selectedModelID = model.id
-        // 깊이를 이어서 고를 수 있으면 닫지 않는다. 고를 것이 없는 모델
-        // (기본·자동·OpenCode)은 그대로 닫아 한 번의 동작으로 끝낸다.
-        guard dismissOnSelect, effortChoices.isEmpty else { return }
+        guard dismissOnSelect, !offersEffort else { return }
         DispatchQueue.main.async { isPresented = false }
     }
 

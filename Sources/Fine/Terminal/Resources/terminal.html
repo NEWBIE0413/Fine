@@ -42,6 +42,15 @@
     color: rgb(0 0 0 / 72%);
     background: rgb(0 0 0 / 3%);
   }
+  /* 다크에서는 같은 구조에 잉크만 뒤집는다 — 검정 글자는 어두운 바탕에서 사라진다. */
+  html.fine-dark #fine-status {
+    border-top-color: rgb(255 255 255 / 10%);
+    color: rgb(255 255 255 / 52%);
+  }
+  html.fine-dark #fine-status:hover {
+    color: rgb(255 255 255 / 80%);
+    background: rgb(255 255 255 / 6%);
+  }
   /* 한글 조합 프리뷰: 네이티브 IME처럼 테마 색 + 밑줄로 표시 (기본은 검정 박스) */
   #terminal .composition-view {
     background: var(--term-bg, #1e1e1e);
@@ -246,6 +255,10 @@
   window.smSetFooterCrop = function (px) {
     document.documentElement.style.setProperty('--footer-crop', (px || 0) + 'px');
     try { fit.fit(); } catch (e) {}
+  };
+  /* 터미널은 WKWebView라 앱의 colorScheme이 닿지 않는다. 네이티브가 직접 알려준다. */
+  window.smSetScheme = function (dark) {
+    document.documentElement.classList.toggle('fine-dark', !!dark);
   };
   window.smSetStatus = function (status) {
     document.getElementById('fine-status').textContent = status || '';
