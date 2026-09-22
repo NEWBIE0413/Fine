@@ -450,3 +450,18 @@ final class ClaudeModelCatalogTests: XCTestCase {
         XCTAssertTrue(ClaudeModelCatalog.parse(Data("not json".utf8)).isEmpty)
     }
 }
+
+extension ClaudeModelCatalogTests {
+    /// 모델 이름은 출처에 따라 "Claude Opus 5"로도 "Opus 5"로도 온다.
+    /// 컴포저는 하네스를 따로 보여주므로 어느 쪽이든 짧은 쪽으로 읽혀야 한다.
+    func testNamesReadTheSameWhicheverSourceTheyCameFrom() {
+        let fromGateway = QuickModelOption(id: "claude-opus-5", displayName: "Claude Opus 5")
+        let fromCatalog = QuickModelOption(id: "claude-opus-5", displayName: "Opus 5")
+        XCTAssertEqual(fromGateway.conciseDisplayName, "Opus 5")
+        XCTAssertEqual(fromCatalog.conciseDisplayName, "Opus 5")
+
+        // 제공사 이름이 접두사로 붙는 기존 형태도 그대로 벗겨져야 한다.
+        let kimi = QuickModelOption(id: "claude-kimi-k2", displayName: "Kimi · k2")
+        XCTAssertEqual(kimi.conciseDisplayName, "k2")
+    }
+}

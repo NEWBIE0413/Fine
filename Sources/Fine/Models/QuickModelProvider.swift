@@ -72,10 +72,12 @@ extension QuickModelOption {
         harness == .claude && !isDefault && provider != .claude
     }
 
+    /// 컴포저에서는 하네스 이름이 바로 옆에 있다. 모델 이름이 그것을 다시 말할
+    /// 이유가 없다 — 출처마다 "Claude Opus 5"로도 "Opus 5"로도 오므로 여기서 맞춘다.
     var conciseDisplayName: String {
-        let prefix = "\(provider.title) · "
-        return displayName.hasPrefix(prefix)
-            ? String(displayName.dropFirst(prefix.count))
-            : displayName
+        for prefix in ["\(provider.title) · ", "\(provider.title) "] where displayName.hasPrefix(prefix) {
+            return String(displayName.dropFirst(prefix.count))
+        }
+        return displayName
     }
 }
