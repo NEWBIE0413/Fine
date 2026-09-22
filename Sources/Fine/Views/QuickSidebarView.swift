@@ -3,10 +3,13 @@ import SwiftUI
 /// Fine의 열린 세션과 세 하네스의 최근 대화를 표시하는 사이드바.
 struct QuickSidebarView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var recentScanner = QuickConversationScanner.shared
     @State private var isHoveringNew = false
     @AppStorage("recentConversationsExpanded") private var recentExpanded = true
+
+    private var palette: FinePalette { .resolve(colorScheme) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -73,10 +76,10 @@ struct QuickSidebarView: View {
                         // layer animates, so terminal selection and row hitboxes stay immediate.
                         let selectedIndex = appState.sessions.firstIndex { $0.id == appState.selectedSession?.id }
                         RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
-                            .fill(FineTheme.selectedFill)
+                            .fill(palette.selectedFill)
                             .overlay {
                                 RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
-                                    .stroke(FineTheme.selectedRim, lineWidth: 1)
+                                    .stroke(palette.selectedRim, lineWidth: 1)
                             }
                             .frame(height: 37)
                             .offset(y: CGFloat(selectedIndex ?? 0) * 37)

@@ -76,6 +76,9 @@ struct NightSceneView: View {
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .onAppear { userImage = Self.loadUserImage() }
+        .onReceive(NotificationCenter.default.publisher(for: HomeSceneLibrary.didChange)) { _ in
+            userImage = Self.loadUserImage()
+        }
     }
 
     /// 폭을 꽉 채우고 넘치는 세로는 잘라낸다. 맞춰 넣으면 옆이 비고,

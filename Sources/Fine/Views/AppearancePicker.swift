@@ -77,6 +77,8 @@ struct AppearanceToggle: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
+    /// 파문이 시작될 자리. 누른 버튼에서 퍼져야 원인과 결과가 이어진다.
+    @State private var center: CGPoint = .zero
 
     private var isDark: Bool {
         switch FineAppearance(rawValue: stored) ?? .system {
@@ -89,6 +91,9 @@ struct AppearanceToggle: View {
     var body: some View {
         Button {
             let next: FineAppearance = isDark ? .light : .dark
+            // 파문을 먼저 띄우고 색을 바꾼다. 순서가 반대면 화면이 이미 바뀐 뒤에
+            // 파문이 도착해 두 사건이 따로 논다.
+            ThemeTransition.ripple(from: center)
             stored = next.rawValue
             FineAppearance.apply(next)
         } label: {
@@ -102,6 +107,18 @@ struct AppearanceToggle: View {
                 )
                 .contentShape(Rectangle())
                 .contentTransition(.symbolEffect(.replace))
+        }
+        .background {
+            // 창 좌표로 자기 가운데를 기록해 둔다.
+            GeometryReader { geometry in
+                Color.clear.onAppear {
+                    let frame = geometry.frame(in: .global)
+                    center = CGPoint(x: frame.midX, y: frame.midY)
+                }
+                .onChange(of: geometry.frame(in: .global)) { _, frame in
+                    center = CGPoint(x: frame.midX, y: frame.midY)
+                }
+            }
         }
         .buttonStyle(.finePress)
         // 옆의 "새 대화" 버튼은 라벨 안에 Spacer가 있어 줄 전체를 가져간다.

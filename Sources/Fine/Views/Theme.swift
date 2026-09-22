@@ -134,6 +134,9 @@ struct FinePalette {
     let sidebarTint: Color
     /// 장면 위에 덮는 막. 그림이 밝으면 글자가 묻힌다.
     let sceneScrim: Color
+    /// 선택된 대화 줄. 어두운 쪽에서 흰 면은 혼자 튀므로 옅은 회색으로 든다.
+    let selectedFill: Color
+    let selectedRim: Color
 
     static let light = FinePalette(
         isDark: false,
@@ -147,7 +150,9 @@ struct FinePalette {
         bloom: .clear,
         shadow: Color(red: 0.27, green: 0.30, blue: 0.26).opacity(0.07),
         sidebarTint: .clear,
-        sceneScrim: .clear
+        sceneScrim: .clear,
+        selectedFill: .white.opacity(0.62),
+        selectedRim: .white.opacity(0.72)
     )
 
     /// 짙은 블루 계열. 순검정이 아니라 푸른 기를 남겨야 장면과 바탕이 한 몸으로 읽힌다.
@@ -163,7 +168,10 @@ struct FinePalette {
         bloom: Color(red: 0.16, green: 0.30, blue: 0.72),
         shadow: .black.opacity(0.55),
         sidebarTint: .black.opacity(0.74),
-        sceneScrim: .black.opacity(0.30)
+        sceneScrim: .black.opacity(0.30),
+        // 거의 검은 패널 위에서는 흰 면이 조명처럼 튄다. 한 단만 들어 올린다.
+        selectedFill: .white.opacity(0.10),
+        selectedRim: .white.opacity(0.14)
     )
 
     static func resolve(_ scheme: ColorScheme) -> FinePalette {

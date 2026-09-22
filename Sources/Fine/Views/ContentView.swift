@@ -33,6 +33,7 @@ struct ContentView: View {
             .background(FineTheme.workspace)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: appState.selectedSession?.id)
         }
+        .overlay(ThemeTransitionOverlay())
         .background(Color.clear)
         // 외형의 출처는 하나여야 한다. preferredColorScheme는 창에 외형을 직접 박는데,
         // NSApp/창에 건 값과 어긋나면 레이아웃이 한 번 돌 때마다 서로를 덮어쓴다

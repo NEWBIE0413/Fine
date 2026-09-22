@@ -85,6 +85,12 @@ struct FineCommands: Commands {
             .keyboardShortcut("t", modifiers: .command)
         }
 
+        CommandGroup(after: .toolbar) {
+            Button("홈 배경 고르기…") { HomeSceneLibrary.chooseAndInstall() }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+            Button("홈 배경 지우기") { try? HomeSceneLibrary.clear() }
+        }
+
         CommandMenu("Conversation") {
             Button("Next Conversation") { appState?.selectNextSession() }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
