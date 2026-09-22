@@ -11,11 +11,21 @@ final class QuickModelSelectionTests: XCTestCase {
         XCTAssertFalse(catalog.routerAvailable)
         XCTAssertEqual(
             catalog.models.map(\.id),
-            [QuickModelOption.defaultID, "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
+            [
+                QuickModelOption.defaultID,
+                QuickAutoRouter.autoModelID,
+                "claude-opus-5",
+                "claude-sonnet-5",
+                "claude-haiku-4-5",
+            ]
         )
         XCTAssertTrue(catalog.models[0].isDefault)
         XCTAssertFalse(catalog.models[0].requiresProxy)
         XCTAssertEqual(catalog.models[0].provider, .claude)
+        // "자동"은 실제 모델이 아니다. 프록시를 요구하지 않고, 세션을 띄우기 전에
+        // 반드시 구체 모델로 해소되어야 한다.
+        XCTAssertTrue(catalog.models[1].isAuto)
+        XCTAssertFalse(catalog.models[1].requiresProxy)
         XCTAssertFalse(catalog.models.contains(where: \.isCodex))
     }
 

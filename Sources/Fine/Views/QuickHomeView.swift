@@ -9,6 +9,7 @@ struct QuickHomeView: View {
     @State private var selectedEffort: QuickEffort
     @State private var proxyEnabled: Bool
     @State private var isModelPickerPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
         let saved = QuickComposerPreferences.load()
@@ -26,6 +27,7 @@ struct QuickHomeView: View {
                 }
                 Text(sessionModeDescription)
                     .font(.system(size: 11))
+                    .fineTracking(11)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -38,6 +40,7 @@ struct QuickHomeView: View {
                 selectedModelID: $selectedModelID,
                 isPresented: $isModelPickerPresented,
                 onRefresh: { modelCatalog.refresh(harness: harness) },
+                selectedEffort: $selectedEffort,
                 isLoading: modelCatalog.isLoading
             )
         }
@@ -91,12 +94,17 @@ struct QuickHomeView: View {
         }
     }
 
+    /// 모델과 깊이를 한 줄에 함께 보여준다. 둘은 늘 같이 정해지는 값이다.
+    private var modelPickerTitle: String {
+        if selectedModel.isAuto { return "자동" }
+        let name = selectedModel.conciseDisplayName
+        guard !selectedModel.supportedEfforts.isEmpty else { return name }
+        return "\(name) · \(selectedEffort.displayName)"
+    }
+
     private var modelOptions: some View {
         HStack(spacing: 6) {
             modelPicker
-            if !selectedModel.supportedEfforts.isEmpty {
-                effortPicker
-            }
             if harness == .claude {
                 proxyButton
             }
@@ -116,7 +124,7 @@ struct QuickHomeView: View {
                             : Color(red: 0.22, green: 0.27, blue: 0.23))
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.finePress)
         .disabled(trimmedPrompt.isEmpty)
         .accessibilityLabel("대화 시작")
         .help("대화 시작")
@@ -130,10 +138,20 @@ struct QuickHomeView: View {
         let initialPrompt = trimmedPrompt
         guard !initialPrompt.isEmpty else { return }
         prompt = ""
-        appState.addSession(
-            initialPrompt: initialPrompt,
-            configuration: currentConfiguration
-        )
+        let configuration = currentConfiguration
+        guard configuration.isAutoModel else {
+            appState.addSession(initialPrompt: initialPrompt, configuration: configuration)
+            return
+        }
+        // "자동"은 실제 모델이 아니다. 라우터에게 물어 구체 설정으로 바꾼 뒤에 띄운다.
+        // 워엄 상태에서 ~85ms이고, 실패하면 라우터가 폴백 설정을 돌려준다.
+        let models = modelCatalog.models
+        Task { @MainActor in
+            let resolved = await QuickAutoRouter.resolve(
+                prompt: initialPrompt, available: models, fallback: configuration
+            )
+            appState.addSession(initialPrompt: initialPrompt, configuration: resolved)
+        }
     }
 
     private var selectedModel: QuickModelOption {
@@ -150,9 +168,9 @@ struct QuickHomeView: View {
         Button {
             isModelPickerPresented.toggle()
         } label: {
-            pickerLabel(selectedModel.conciseDisplayName, icon: "sparkle")
+            pickerLabel(modelPickerTitle, icon: selectedModel.isAuto ? "wand.and.stars" : "sparkle")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.finePress)
         .help(modelPickerHelp)
     }
 
@@ -167,27 +185,6 @@ struct QuickHomeView: View {
                 ? "대화 모델 선택"
                 : "라우터 오프라인 — Claude 모델만 사용 가능"
         }
-    }
-
-    private var effortPicker: some View {
-        Menu {
-            ForEach(selectedModel.supportedEfforts) { effort in
-                Button {
-                    selectedEffort = effort
-                } label: {
-                    if selectedEffort == effort {
-                        Label(effort.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(effort.displayName)
-                    }
-                }
-            }
-        } label: {
-            pickerLabel(selectedEffort.displayName, icon: "dial.medium")
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("응답 생성 effort")
     }
 
     private func constrainSelectedEffort() {
@@ -225,7 +222,7 @@ struct QuickHomeView: View {
                         .fill(Color.primary.opacity(proxyEnabled ? 0.10 : 0.045))
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.finePress)
         .disabled(locked)
         .help(proxyHelp)
     }
@@ -239,7 +236,7 @@ struct QuickHomeView: View {
     private func pickerLabel(_ title: String, icon: String) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-            Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+            Text(title).font(.system(size: 12, weight: .medium)).fineTracking(12).lineLimit(1)
                 .frame(maxWidth: 210, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             Image(systemName: "chevron.down")
@@ -253,6 +250,8 @@ struct QuickHomeView: View {
             RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
                 .fill(FineTheme.controlFill)
         )
+        .contentTransition(.numericText())
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1), value: title)
     }
 
     private var sessionModeDescription: String {
@@ -266,6 +265,7 @@ struct QuickHomeView: View {
                 : "OpenCode에서 선택한 모델로 시작합니다"
         case .claude:
             if selectedModel.isDefault { return "Claude 기본 모델로 시작합니다" }
+            if selectedModel.isAuto { return "질문 난이도를 보고 모델과 깊이를 골라 시작합니다" }
             if !modelCatalog.routerAvailable { return "연결을 확인할 수 없어 Claude 모델만 사용할 수 있습니다" }
             if selectedModel.requiresProxy || proxyEnabled {
                 return "대화 중에도 다른 제공사의 모델로 전환할 수 있습니다"

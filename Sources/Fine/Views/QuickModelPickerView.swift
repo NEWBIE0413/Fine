@@ -6,6 +6,9 @@ struct QuickModelPickerView: View {
     @Binding var isPresented: Bool
     let dismissOnSelect: Bool
     let onRefresh: (() -> Void)?
+    /// 모델과 깊이는 늘 같이 정해지는 값이다. 컴포저 줄에 따로 두면 자리만 차지하고
+    /// 둘의 관계가 보이지 않으므로 같은 패널에서 고르게 한다.
+    var selectedEffort: Binding<QuickEffort>?
     var isLoading: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,12 +18,14 @@ struct QuickModelPickerView: View {
     @Namespace private var selection
 
     init(models: [QuickModelOption], selectedModelID: Binding<String>, isPresented: Binding<Bool>,
-         dismissOnSelect: Bool = true, onRefresh: (() -> Void)? = nil, isLoading: Bool = false) {
+         dismissOnSelect: Bool = true, onRefresh: (() -> Void)? = nil,
+         selectedEffort: Binding<QuickEffort>? = nil, isLoading: Bool = false) {
         self.models = models
         _selectedModelID = selectedModelID
         _isPresented = isPresented
         self.dismissOnSelect = dismissOnSelect
         self.onRefresh = onRefresh
+        self.selectedEffort = selectedEffort
         self.isLoading = isLoading
         let selected = models.first { $0.id == selectedModelID.wrappedValue }
         let initial = selected?.provider ?? models.first?.provider ?? .claude
@@ -45,7 +50,11 @@ struct QuickModelPickerView: View {
     private var panelHeight: CGFloat {
         let count = models.filter { $0.provider == provider }.count
         let rows = max(2, min(7, count))
-        return min(410, CGFloat(rows) * 44 + 76 + (availableTiers.count > 1 ? 44 : 0) + (models.count > 8 ? 40 : 0))
+        let effortRow: CGFloat = selectedEffort != nil ? 45 : 0
+        // 상한은 그대로 둔다. 깊이 행이 붙으면 목록이 한 줄 덜 보일 뿐,
+        // 패널이 최소 창을 넘지 않는 것이 먼저다.
+        return min(410, CGFloat(rows) * 44 + 76 + (availableTiers.count > 1 ? 44 : 0)
+                   + (models.count > 8 ? 40 : 0) + effortRow)
     }
 
     var body: some View {
@@ -101,6 +110,8 @@ struct QuickModelPickerView: View {
                 }
                 modelList.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+
+            effortSection
         }
         .frame(maxWidth: 500)
         .frame(height: panelHeight)
@@ -200,8 +211,62 @@ struct QuickModelPickerView: View {
 
     private func select(_ model: QuickModelOption) {
         selectedModelID = model.id
-        guard dismissOnSelect else { return }
+        // 깊이를 이어서 고를 수 있으면 닫지 않는다. 고를 것이 없는 모델
+        // (기본·자동·OpenCode)은 그대로 닫아 한 번의 동작으로 끝낸다.
+        guard dismissOnSelect, effortChoices.isEmpty else { return }
         DispatchQueue.main.async { isPresented = false }
+    }
+
+    private var currentModel: QuickModelOption? { models.first { $0.id == selectedModelID } }
+
+    private var effortChoices: [QuickEffort] {
+        guard selectedEffort != nil, let model = currentModel, !model.isAuto else { return [] }
+        return model.supportedEfforts
+    }
+
+    @ViewBuilder
+    private var effortSection: some View {
+        if let binding = selectedEffort, let model = currentModel {
+            Rectangle().fill(FineTheme.divider).frame(height: 1)
+            HStack(spacing: 6) {
+                Text("생각 깊이")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if effortChoices.isEmpty {
+                    Text(model.isAuto ? "질문에 맞춰 자동으로" : "하네스 기본값")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                } else {
+                    ForEach(effortChoices) { effort in
+                        Button { binding.wrappedValue = effort } label: {
+                            Text(effort.displayName)
+                                .font(.system(size: 11, weight: binding.wrappedValue == effort ? .semibold : .medium))
+                                .foregroundStyle(binding.wrappedValue == effort ? .primary : .secondary)
+                                .padding(.horizontal, 11)
+                                .frame(height: 26)
+                                .background {
+                                    if binding.wrappedValue == effort {
+                                        Capsule().fill(FineTheme.controlFill)
+                                            .matchedGeometryEffect(id: "effort", in: selection)
+                                    }
+                                }
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(binding.wrappedValue == effort ? .isSelected : [])
+                    }
+                    Button("완료") { isPresented = false }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.leading, 6)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 1),
+                       value: binding.wrappedValue)
+        }
     }
 }
 

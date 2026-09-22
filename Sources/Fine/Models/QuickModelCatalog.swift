@@ -53,6 +53,10 @@ struct QuickModelOption: Codable, Hashable, Identifiable, Sendable {
 
     var isDefault: Bool { id == Self.defaultID }
 
+    /// "자동" 항목. 실제 모델이 아니라 라우터에게 맡기겠다는 표시다.
+    /// 세션을 띄우기 전에 반드시 구체 모델로 해소되어야 한다.
+    var isAuto: Bool { id == QuickAutoRouter.autoModelID }
+
     var isCodex: Bool {
         id.hasPrefix("claude-codex-")
     }
@@ -176,10 +180,13 @@ struct QuickSessionConfiguration: Codable, Equatable, Sendable {
 
     var isDefaultModel: Bool { modelID == QuickModelOption.defaultID }
 
+    /// 아직 해소되지 않은 "자동". 이 상태로 세션을 띄우면 안 된다.
+    var isAutoModel: Bool { modelID == QuickAutoRouter.autoModelID }
+
     /// The router only ever sits in front of Claude Code, and never in default
     /// mode: "기본" means the user asked for the terminal's plain `ccv`.
     var usesProxy: Bool {
-        guard harness == .claude, !isDefaultModel else { return false }
+        guard harness == .claude, !isDefaultModel, !isAutoModel else { return false }
         return proxyEnabled
             || modelID.hasPrefix("claude-codex-")
             || modelID.hasPrefix("claude-kimi-")
@@ -319,6 +326,7 @@ enum QuickComposerPreferences {
 final class QuickModelCatalog: ObservableObject {
     static let claudeFallbackModels: [QuickModelOption] = [
         .defaultOption(for: .claude),
+        QuickAutoRouter.autoOption(for: .claude),
         QuickModelOption(id: "claude-opus-5", displayName: "Opus 5"),
         QuickModelOption(id: "claude-sonnet-5", displayName: "Sonnet 5"),
         QuickModelOption(id: "claude-haiku-4-5", displayName: "Haiku 4.5"),
@@ -398,7 +406,7 @@ final class QuickModelCatalog: ObservableObject {
                     throw URLError(.cannotParseResponse)
                 }
                 guard !Task.isCancelled else { return }
-                self?.models = [.defaultOption(for: .claude)] + discovered
+                self?.models = [.defaultOption(for: .claude), QuickAutoRouter.autoOption(for: .claude)] + discovered
                 self?.routerAvailable = true
             } catch {
                 guard !Task.isCancelled else { return }
@@ -408,7 +416,7 @@ final class QuickModelCatalog: ObservableObject {
                 guard !Task.isCancelled else { return }
                 self?.models = cliModels.isEmpty
                     ? Self.claudeFallbackModels
-                    : [.defaultOption(for: .claude)] + cliModels
+                    : [.defaultOption(for: .claude), QuickAutoRouter.autoOption(for: .claude)] + cliModels
                 self?.routerAvailable = false
             }
             self?.isLoading = false

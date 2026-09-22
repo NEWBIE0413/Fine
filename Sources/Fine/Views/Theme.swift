@@ -30,6 +30,35 @@ enum FineTheme {
     static let glassEdge = Color.black.opacity(0.08)
 }
 
+/// 누르는 순간 반응한다. 놓을 때까지 기다리면 직접 만지는 느낌이 사라진다.
+/// 스프링은 critically damped — 버튼은 튕길 이유가 없다.
+struct FinePressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var scale: CGFloat = 0.97
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? scale : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 1),
+                value: configuration.isPressed
+            )
+    }
+}
+
+extension ButtonStyle where Self == FinePressStyle {
+    static var finePress: FinePressStyle { FinePressStyle() }
+}
+
+/// 글자 크기에 따라 자간이 달라져야 한다. 큰 글자는 그대로 두면 성기게 읽히고,
+/// 작은 글자는 조금 벌려야 읽힌다. 한 값을 모든 크기에 쓰면 어딘가는 틀린다.
+extension View {
+    func fineTracking(_ size: CGFloat) -> some View {
+        tracking(size >= 20 ? -0.4 : size >= 15 ? -0.2 : size <= 11 ? 0.15 : 0)
+    }
+}
+
 struct GlassSidebarBackground: View {
     var body: some View {
         ZStack(alignment: .trailing) {

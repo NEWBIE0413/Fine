@@ -82,6 +82,7 @@ struct QuickHomeComposer<Controls: View>: View {
             TextField("무엇이든 물어보세요", text: $prompt, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
+                .fineTracking(16)
                 .lineSpacing(5)
                 .lineLimit(3...8)
                 .focused($isPromptFocused)
@@ -97,6 +98,20 @@ struct QuickHomeComposer<Controls: View>: View {
         .background {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.white.opacity(reduceTransparency ? 1 : 0.82))
+                .overlay {
+                    // 위쪽만 밝은 테두리 — 표면이 빛을 받는 것처럼 읽힌다.
+                    // 투명도를 낮춘 환경에서는 재질 표현이 의미가 없으므로 끈다.
+                    if !reduceTransparency {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.85), .white.opacity(0.12)],
+                                    startPoint: .top, endPoint: .bottom
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                }
         }
         .shadow(color: Color(red: 0.27, green: 0.30, blue: 0.26).opacity(0.07), radius: 24, y: 10)
         .onAppear { isPromptFocused = true }
