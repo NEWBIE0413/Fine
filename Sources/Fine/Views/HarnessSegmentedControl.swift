@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// 하네스는 거의 바꾸지 않는 값이라, 세 칸을 모두 글자로 채울 이유가 없다.
+/// 고른 것만 이름을 보이고 나머지는 마크만 둔다 — 한 번의 클릭으로 바꾸는 성질과
+/// 현재 상태가 보이는 성질은 그대로 두면서 폭만 줄인다.
 struct HarnessSegmentedControl: View {
     @Binding var selection: QuickHarness
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -8,23 +11,38 @@ struct HarnessSegmentedControl: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(QuickHarness.allCases) { harness in
+                let isSelected = selection == harness
                 Button { selection = harness } label: {
-                    Text(harness.title)
-                        .font(.system(size: 12, weight: selection == harness ? .semibold : .medium))
-                        .foregroundStyle(selection == harness ? .primary : .secondary)
-                        .padding(.horizontal, 10)
-                        .frame(height: FineTheme.compactControlHeight - 4)
-                        .background {
-                            if selection == harness {
-                                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .fill(.white.opacity(0.94))
-                                    .matchedGeometryEffect(id: "harness", in: highlight)
-                            }
+                    HStack(spacing: 5) {
+                        Image(harness.rawValue, bundle: .module)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12, height: 12)
+                            .foregroundStyle(isSelected ? .primary : .secondary)
+                        if isSelected {
+                            Text(harness.title)
+                                .font(.system(size: 12, weight: .semibold))
+                                .fineTracking(12)
+                                .fixedSize()
+                                .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .leading)))
                         }
-                        .contentShape(Rectangle())
+                    }
+                    .padding(.horizontal, isSelected ? 9 : 7)
+                    .frame(height: FineTheme.compactControlHeight - 4)
+                    .background {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(.white.opacity(0.94))
+                                .matchedGeometryEffect(id: "harness", in: highlight)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == harness ? .isSelected : [])
+                .buttonStyle(.finePress)
+                .help(harness.title)
+                .accessibilityLabel(harness.title)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
         .padding(2)
