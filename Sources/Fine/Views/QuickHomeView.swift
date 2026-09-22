@@ -240,26 +240,26 @@ struct QuickHomeView: View {
     }
 
     private var sessionModeDescription: String {
-        if modelCatalog.isLoading { return "Checking available models" }
+        if modelCatalog.isLoading { return "모델 목록 확인 중" }
         switch harness {
         case .codex:
-            return "Starts with Codex"
+            return "Codex로 시작합니다"
         case .opencode:
             return selectedModel.isDefault
-                ? "Starts with OpenCode's default model"
-                : "Starts with the selected OpenCode model"
+                ? "OpenCode 기본 모델로 시작합니다"
+                : "OpenCode에서 선택한 모델로 시작합니다"
         case .omp:
             return selectedModel.isDefault
-                ? "Starts with the model roles from your omp config"
-                : "Overrides the default role only · smol, slow and plan stay as configured"
+                ? "omp 설정의 역할 모델 그대로 시작합니다"
+                : "default 역할만 바꿔 시작합니다 · smol·slow·plan은 그대로"
         case .claude:
-            if selectedModel.isDefault { return "Starts with Claude's default model" }
-            if selectedModel.isAuto { return "Picks the model and depth from how hard the question looks" }
-            if !modelCatalog.routerAvailable { return "Cannot reach the router — Claude models only" }
+            if selectedModel.isDefault { return "Claude 기본 모델로 시작합니다" }
+            if selectedModel.isAuto { return "질문 난이도를 보고 모델과 깊이를 골라 시작합니다" }
+            if !modelCatalog.routerAvailable { return "연결을 확인할 수 없어 Claude 모델만 사용할 수 있습니다" }
             if selectedModel.requiresProxy || proxyEnabled {
-                return "You can switch providers mid-conversation"
+                return "대화 중에도 다른 제공사의 모델로 전환할 수 있습니다"
             }
-            return "Starts with Claude"
+            return "Claude로 시작합니다"
         }
     }
 }
