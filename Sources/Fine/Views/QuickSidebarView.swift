@@ -187,6 +187,15 @@ struct QuickSidebarView: View {
                     .padding(.horizontal, FineTheme.sidebarInset)
                 }
             }
+
+            Spacer(minLength: 8)
+
+            HStack {
+                AppearancePicker()
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, FineTheme.sidebarInset)
+            .padding(.bottom, 12)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }

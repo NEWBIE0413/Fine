@@ -6,6 +6,7 @@ import SwiftUI
 struct HarnessSegmentedControl: View {
     @Binding var selection: QuickHarness
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @Namespace private var highlight
 
     var body: some View {
@@ -33,7 +34,8 @@ struct HarnessSegmentedControl: View {
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(.white.opacity(0.94))
+                                // 어두운 쪽에서 새하얀 칩은 혼자 튄다. 옅게 띄우기만 한다.
+                                .fill(.white.opacity(colorScheme == .dark ? 0.16 : 0.94))
                                 .matchedGeometryEffect(id: "harness", in: highlight)
                         }
                     }
@@ -46,7 +48,10 @@ struct HarnessSegmentedControl: View {
             }
         }
         .padding(2)
-        .background(FineTheme.controlFill, in: RoundedRectangle(cornerRadius: FineTheme.compactControlRadius))
+        .background(
+            FinePalette.resolve(colorScheme).controlFill,
+            in: RoundedRectangle(cornerRadius: FineTheme.compactControlRadius)
+        )
         .fixedSize()
         .animation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 1), value: selection)
         .accessibilityElement(children: .contain)

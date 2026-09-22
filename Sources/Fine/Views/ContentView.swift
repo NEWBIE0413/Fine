@@ -5,6 +5,7 @@ struct ContentView: View {
     @Binding private var sceneWindowStateID: UUID?
     @StateObject private var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("fineAppearance") private var appearance = FineAppearance.system.rawValue
 
     init(windowStateID: Binding<UUID?> = .constant(nil)) {
         _sceneWindowStateID = windowStateID
@@ -33,6 +34,8 @@ struct ContentView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: appState.selectedSession?.id)
         }
         .background(Color.clear)
+        // 외형은 앱 전체에 한 번만 건다. 창 배경과 사이드바 재질이 같이 따라와야 한다.
+        .preferredColorScheme((FineAppearance(rawValue: appearance) ?? .system).colorScheme)
         .ignoresSafeArea(.container, edges: .top)
         .background {
             WindowBindingView(appState: appState, title: appState.windowTitle)

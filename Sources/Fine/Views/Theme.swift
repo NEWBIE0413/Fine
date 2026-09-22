@@ -60,15 +60,19 @@ extension View {
 }
 
 struct GlassSidebarBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
+        // 어두운 쪽에서는 흰 광택이 뿌옇게 뜬다. 같은 구조에 세기만 낮춘다.
+        let sheen = colorScheme == .dark ? 0.28 : 1.0
         ZStack(alignment: .trailing) {
             Rectangle()
                 .fill(.ultraThinMaterial)
 
             LinearGradient(
                 colors: [
-                    FineTheme.glassSheenTop,
-                    FineTheme.glassSheenMiddle,
+                    FineTheme.glassSheenTop.opacity(sheen),
+                    FineTheme.glassSheenMiddle.opacity(sheen),
                     FineTheme.glassTintBottom,
                 ],
                 startPoint: .topLeading,
@@ -99,5 +103,70 @@ struct QuickSectionHeader<Trailing: View>: View {
         .padding(.horizontal, FineTheme.sidebarInset)
         .padding(.top, 18)
         .padding(.bottom, 5)
+    }
+}
+
+// MARK: - 다크 테마
+
+/// 밝은 종이 테마와 짙은 밤 테마가 같은 이름으로 값을 내놓는다.
+/// 색을 뷰마다 하드코딩하면 테마를 하나 더 만들 때마다 전부 찾아다녀야 한다.
+struct FinePalette {
+    let isDark: Bool
+
+    /// 바탕. 밝은 쪽은 종이, 어두운 쪽은 푸른 기가 도는 검정.
+    let base: Color
+    /// 제목 글자. 배경 위에서 충분히 떠야 한다.
+    let ink: Color
+    /// 컴포저 유리의 채움과 위/아래 테두리.
+    let glassFill: Color
+    let glassEdgeTop: Color
+    let glassEdgeBottom: Color
+    /// 작은 컨트롤의 바탕. 어두운 쪽에서는 검정이 아니라 옅은 흰색이어야 보인다.
+    let controlFill: Color
+    let divider: Color
+    /// 컴포저 뒤에서 은은하게 올라오는 빛. 짙은 블루.
+    let bloom: Color
+    let shadow: Color
+
+    static let light = FinePalette(
+        isDark: false,
+        base: Color(red: 0.965, green: 0.962, blue: 0.948),
+        ink: Color(red: 0.19, green: 0.21, blue: 0.19),
+        glassFill: .white.opacity(0.82),
+        glassEdgeTop: .white.opacity(0.85),
+        glassEdgeBottom: .white.opacity(0.12),
+        controlFill: .black.opacity(0.05),
+        divider: .black.opacity(0.07),
+        bloom: .clear,
+        shadow: Color(red: 0.27, green: 0.30, blue: 0.26).opacity(0.07)
+    )
+
+    /// 짙은 블루 계열. 순검정이 아니라 푸른 기를 남겨야 장면과 바탕이 한 몸으로 읽힌다.
+    static let dark = FinePalette(
+        isDark: true,
+        base: Color(red: 0.027, green: 0.035, blue: 0.063),
+        ink: Color(red: 0.90, green: 0.93, blue: 0.99),
+        glassFill: Color(red: 0.055, green: 0.085, blue: 0.175).opacity(0.58),
+        glassEdgeTop: .white.opacity(0.30),
+        glassEdgeBottom: .white.opacity(0.04),
+        controlFill: .white.opacity(0.08),
+        divider: .white.opacity(0.09),
+        bloom: Color(red: 0.16, green: 0.30, blue: 0.72),
+        shadow: .black.opacity(0.55)
+    )
+
+    static func resolve(_ scheme: ColorScheme) -> FinePalette {
+        scheme == .dark ? .dark : .light
+    }
+}
+
+private struct FinePaletteKey: EnvironmentKey {
+    static let defaultValue = FinePalette.light
+}
+
+extension EnvironmentValues {
+    var finePalette: FinePalette {
+        get { self[FinePaletteKey.self] }
+        set { self[FinePaletteKey.self] = newValue }
     }
 }
