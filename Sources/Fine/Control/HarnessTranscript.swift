@@ -32,14 +32,36 @@ enum HarnessTranscript {
         case .opencode:
             return store.openCodeMessages(sessionID: sessionID, limit: limit)
         case .omp:
-            // omp의 jsonl 스키마를 아직 확인하지 못했다. 추측해서 파싱하면
-            // 조용히 틀린 대화 기록을 보여주게 되므로, 확인 전까지 없다고 답한다.
-            return nil
+            guard let session = OmpSessionResolver.session(id: sessionID),
+                  let data = try? Data(contentsOf: session.url) else { return nil }
+            return Array(parseOmp(data).suffix(limit))
         }
     }
 
     /// Claude transcript: type user/assistant, message.content는 문자열 또는 블록 배열.
     /// 도구 결과·명령 메타(<command-…>)·인터럽트 마커는 대화가 아니므로 뺀다.
+    /// omp의 한 줄은 `{type, message: {role, content: [...]}}`이다.
+    /// `thinking` 블록은 화면에 내보내지 않는다 — 대화가 아니라 과정이다.
+    static func parseOmp(_ data: Data) -> [Message] {
+        lines(data).compactMap { obj in
+            guard obj["type"] as? String == "message",
+                  let message = obj["message"] as? [String: Any],
+                  let role = message["role"] as? String,
+                  role == "user" || role == "assistant",
+                  let blocks = message["content"] as? [[String: Any]] else { return nil }
+            let text = blocks
+                .compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return Message(
+                role: role, text: text,
+                timestamp: OmpSessionResolver.date(obj["timestamp"])
+                    ?? OmpSessionResolver.date(message["timestamp"])
+            )
+        }
+    }
+
     static func parseClaude(_ data: Data) -> [Message] {
         lines(data).compactMap { obj in
             guard let type = obj["type"] as? String, type == "user" || type == "assistant",
