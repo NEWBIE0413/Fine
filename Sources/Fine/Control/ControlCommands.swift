@@ -66,6 +66,19 @@ enum ControlCommands {
             if r.bool("focus") ?? true { focus(entry) }
             return describe(session, index: index(of: session, in: entry), in: entry, windowIndex: windowIndex)
 
+        case "tab.rename":
+            let (entry, windowIndex, session, _) = try tab(r)
+            guard let name = r.string("name"), !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw fail("usage: fine rename <tab> <name>")
+            }
+            // "auto"는 이름을 지우고 하네스가 만드는 제목으로 되돌린다.
+            if name == "auto" {
+                session.clearCustomName()
+            } else {
+                session.rename(to: name)
+            }
+            return describe(session, index: index(of: session, in: entry), in: entry, windowIndex: windowIndex)
+
         case "tab.close":
             let (entry, _, session, _) = try tab(r)
             entry.state.removeSession(session)

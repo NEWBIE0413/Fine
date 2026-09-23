@@ -6,6 +6,8 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     let id: UUID
     private(set) var controlFingerprint = UUID().uuidString
     @Published var name: String
+    /// 사용자가 직접 지은 이름인가. 하네스가 만든 제목이 이것을 덮지 않는다.
+    @Published private(set) var isNameUserSet = false
     @Published var isRunning = false
     @Published var startError: String?
     @Published var isModelPickerPresented = false
@@ -64,6 +66,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
             configuration: snapshot.configuration,
             configurationStorage: configurationStorage
         )
+        isNameUserSet = snapshot.isNameUserSet ?? false
     }
 
     func snapshot() -> QuickSessionSnapshot {
@@ -71,8 +74,25 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
             id: id,
             name: name,
             conversationID: sessionId,
-            configuration: configuration
+            configuration: configuration,
+            isNameUserSet: isNameUserSet ? true : nil
         )
+    }
+
+    /// 사용자가 붙인 이름. 하네스가 만든 제목이 이것을 덮지 않는다 —
+    /// 직접 지은 이름이 대화 몇 번에 사라지면 다시 짓지 않게 된다.
+    func rename(to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != name else { return }
+        name = trimmed
+        isNameUserSet = true
+        persistenceHandler?()
+    }
+
+    /// 자동 제목으로 되돌린다.
+    func clearCustomName() {
+        isNameUserSet = false
+        persistenceHandler?()
     }
 
     func setPersistenceHandler(_ handler: @escaping () -> Void) {
@@ -184,7 +204,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         metadataRefreshInFlight = false
         if configuration.harness == .codex, sessionId != nil {} else if case .resume = launch {} else if case .resumeLatest = launch, sessionId != nil {} else {
             sessionId = nil
-            name = initialName
+            if !isNameUserSet { name = initialName }
         }
 
         if configuration.harness == .claude {
@@ -277,7 +297,7 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
         let identityChanged = sessionId != metadata.id
         sessionId = metadata.id
         if identityChanged {
-            if confirmedSwitch { name = metadata.title ?? initialName }
+            if confirmedSwitch, !isNameUserSet { name = metadata.title ?? initialName }
             configurationStorage.saveIfAbsent(configuration, for: metadata.id)
             persistenceHandler?()
         }
@@ -290,6 +310,8 @@ final class TerminalSession: Identifiable, ObservableObject, Equatable {
     }
 
     func updateTitle(titlesBySessionId: [String: String]) {
+        // 사용자가 지은 이름은 하네스의 제목보다 세다.
+        guard !isNameUserSet else { return }
         guard let sessionId, let title = titlesBySessionId[sessionId],
               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title != name else { return }
         name = title

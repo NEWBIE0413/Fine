@@ -420,3 +420,46 @@ extension QuickSessionTests {
         XCTAssertFalse(restored.sessions[2].isRunning)
     }
 }
+
+extension QuickSessionTests {
+    /// 사용자가 지은 이름은 표시가 남아야 한다 — 그 표시가 하네스의 제목을 막는다.
+    /// 직접 지은 이름이 대화 몇 번에 사라지면 아무도 다시 짓지 않는다.
+    @MainActor
+    func testRenameMarksTheNameAsTheUsersAndTrimsIt() {
+        let session = TerminalSession(name: "새 대화 세션", launch: .blank, configuration: .default)
+        XCTAssertFalse(session.isNameUserSet)
+
+        session.rename(to: "  비트겟 포지션 점검  ")
+        XCTAssertEqual(session.name, "비트겟 포지션 점검")
+        XCTAssertTrue(session.isNameUserSet)
+
+        // 자동 제목은 이름을 건드리지 않는다. 표시가 서 있는 동안은 들어오지 못한다.
+        session.updateTitle(titlesBySessionId: ["anything": "하네스가 지은 제목"])
+        XCTAssertEqual(session.name, "비트겟 포지션 점검")
+
+        session.clearCustomName()
+        XCTAssertFalse(session.isNameUserSet)
+    }
+
+    /// 빈 이름으로는 지울 수 없다 — 이름 없는 탭은 목록에서 구분이 안 된다.
+    @MainActor
+    func testBlankRenameIsIgnored() {
+        let session = TerminalSession(name: "원래 이름", launch: .blank, configuration: .default)
+        session.rename(to: "   ")
+        XCTAssertEqual(session.name, "원래 이름")
+        XCTAssertFalse(session.isNameUserSet)
+    }
+
+    /// 다시 열었을 때도 사용자가 지은 이름이어야 한다.
+    @MainActor
+    func testCustomNameRoundTripsThroughTheSnapshot() {
+        let session = TerminalSession(name: "처음", launch: .blank, configuration: .default)
+        session.rename(to: "내가 지은 이름")
+        let restored = TerminalSession(snapshot: session.snapshot())
+        XCTAssertEqual(restored.name, "내가 지은 이름")
+        XCTAssertTrue(restored.isNameUserSet)
+
+        let plain = TerminalSession(name: "처음", launch: .blank, configuration: .default)
+        XCTAssertFalse(TerminalSession(snapshot: plain.snapshot()).isNameUserSet)
+    }
+}

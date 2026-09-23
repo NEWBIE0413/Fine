@@ -25,6 +25,7 @@ fine — Fine을 터미널에서 조작한다
   fine tab select|close <tab>               탭 선택/닫기
   fine tab next|prev                        다음/이전 탭
   fine tab move <tab> <index|+1|-1>         탭 순서 이동
+  fine rename <tab> <name>                  탭 이름 바꾸기 (auto면 자동 제목으로)
   fine home                                 홈(새 대화 화면)으로
 
   fine read <tab> [lines]                   탭 화면 읽기 (tmux capture-pane)
@@ -199,6 +200,11 @@ do {
         if let mode = sub { args["mode"] = mode }
     case ("home", _): command = "home"
     case ("models", _): command = "models.list"
+    case ("rename", _):
+        guard let tab = sub, !rest.isEmpty else {
+            throw CLIError(message: "usage: fine rename <tab> <name>   (name이 auto면 자동 제목으로 되돌립니다)")
+        }
+        command = "tab.rename"; args["tab"] = tab; args["name"] = rest.joined(separator: " ")
     case ("theme", _):
         guard let tab = sub else { throw CLIError(message: "usage: fine theme <tab>") }
         command = "tab.theme"; args["tab"] = tab

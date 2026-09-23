@@ -14,6 +14,9 @@ struct QuickSessionSnapshot: Codable, Equatable, Identifiable {
     var name: String
     var conversationID: String?
     var configuration: QuickSessionConfiguration
+    /// 사용자가 직접 붙인 이름인가. 그렇다면 하네스가 만든 제목이 덮지 않는다.
+    /// 예전 상태 파일에는 없던 항목이라 optional이다.
+    var isNameUserSet: Bool?
 }
 
 struct WindowState: Codable, Identifiable, Equatable {

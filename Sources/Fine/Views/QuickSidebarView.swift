@@ -210,13 +210,41 @@ private struct QuickSessionRow: View {
     let onDropSession: (OpenSessionDrag, SessionInsertionEdge) -> Bool
     @State private var insertionEdge: SessionInsertionEdge?
     @State private var isHovering = false
+    @State private var isRenaming = false
+    @State private var draft = ""
+    @FocusState private var isFieldFocused: Bool
+
+    private func beginRename() {
+        draft = session.name
+        isRenaming = true
+        isFieldFocused = true
+    }
+
+    private func commitRename() {
+        isRenaming = false
+        session.rename(to: draft)
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(session.name)
-                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                .lineLimit(1)
-                .foregroundStyle(.primary)
+            if isRenaming {
+                // 제자리에서 고친다. 창을 띄우면 이름 하나 바꾸는 일이 과해진다.
+                TextField("", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium))
+                    .focused($isFieldFocused)
+                    .onSubmit(commitRename)
+                    .onExitCommand { isRenaming = false }
+                    .onChange(of: isFieldFocused) { _, focused in
+                        // 다른 곳을 누르면 쓰던 것을 적용하고 닫는다. 되돌리려면 Esc.
+                        if !focused, isRenaming { commitRename() }
+                    }
+            } else {
+                Text(session.name)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
             Spacer(minLength: 0)
             Circle()
                 .fill(session.isRunning ? Color.green.opacity(0.72) : Color.secondary.opacity(0.3))
@@ -227,6 +255,14 @@ private struct QuickSessionRow: View {
         .frame(maxWidth: .infinity)
         .frame(height: 37)
         .accessibilityHidden(true)
+        // 더블클릭이 파인더·사파리에서 이름을 고치는 몸짓이다. 메뉴는 그 보조다.
+        .onTapGesture(count: 2) { beginRename() }
+        .contextMenu {
+            Button("이름 바꾸기") { beginRename() }
+            if session.isNameUserSet {
+                Button("자동 제목으로") { session.clearCustomName() }
+            }
+        }
         .background {
             RoundedRectangle(cornerRadius: FineTheme.rowCornerRadius, style: .continuous)
                 .fill(FineTheme.hoverFill)
