@@ -19,8 +19,12 @@ struct ContentView: View {
         HStack(spacing: 0) {
             QuickSidebarView()
                 .frame(width: sidebarWidth)
-
-            SidebarDivider(width: $sidebarWidth)
+                // 손잡이는 레이아웃을 차지하지 않는다. 폭을 가진 요소로 두면
+                // 사이드바와 작업부 사이에 그만큼 빈 띠가 생긴다.
+                .overlay(alignment: .trailing) {
+                    SidebarDivider(width: $sidebarWidth)
+                        .offset(x: 5)
+                }
 
             ZStack {
                 if let session = appState.selectedSession {

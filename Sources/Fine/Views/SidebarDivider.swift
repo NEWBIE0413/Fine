@@ -17,11 +17,13 @@ struct SidebarDivider: View {
             .fill(Color.clear)
             .frame(width: 10)
             // 실제로 보이는 선은 1pt다. 잡는 자리는 그보다 넓어야 손이 찾는다.
-            .overlay(alignment: .center) {
+            // 경계선 자체는 유리 배경이 이미 그린다. 잡을 수 있다는 것만 잠깐 비춘다.
+            .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(Color.primary.opacity(isHovering ? 0.16 : 0))
+                    .fill(Color.primary.opacity(isHovering ? 0.14 : 0))
                     .frame(width: 1)
                     .animation(.easeOut(duration: 0.12), value: isHovering)
+                    .offset(x: 5)
             }
             .contentShape(Rectangle())
             .onHover { hovering in

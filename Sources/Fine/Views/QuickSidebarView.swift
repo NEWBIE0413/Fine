@@ -58,7 +58,8 @@ struct QuickSidebarView: View {
         // 열린 대화가 얼마나 차지할지는 사이드바 높이에 달려 있다.
         GeometryReader { geometry in
         VStack(alignment: .leading, spacing: 0) {
-            Color.clear.frame(height: FineTheme.titlebarClearance)
+            newConversationRow
+                .padding(.top, FineTheme.titlebarClearance)
 
             if !appState.sessions.isEmpty {
                 QuickSectionHeader(title: "열린 대화") {
@@ -108,11 +109,6 @@ struct QuickSidebarView: View {
                 .frame(height: openListHeight(in: geometry.size.height))
             }
 
-            // "새 대화"는 열린 대화 아래에 온다. 위에 있으면 대화가 늘어날수록
-            // 지금 붙들고 있는 일이 아래로 밀려난다.
-            newConversationRow
-                .padding(.top, appState.sessions.isEmpty ? 0 : 6)
-                .padding(.bottom, 2)
 
             ZStack(alignment: .bottom) {
                 if recentExpanded {
