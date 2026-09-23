@@ -20,10 +20,22 @@ enum QuickSessionPolicy {
         }
     }
 
+    /// `ccv`는 Claude Code에 짧은 플래그를 붙여주는 개인용 런처다. 있으면 그것을 쓰고,
+    /// 없으면 `claude`를 직접 부른다 — 이 저장소를 받은 사람에게 ccv가 있을 이유가 없다.
     static var ccvExecutablePath: String {
-        FinePaths.home
-            .appendingPathComponent("myworld/ccv", isDirectory: false)
-            .path
+        let home = FinePaths.home
+        let candidates = [
+            home.appendingPathComponent("myworld/ccv", isDirectory: false).path,
+            home.appendingPathComponent(".local/bin/claude", isDirectory: false).path,
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "claude"
+    }
+
+    /// 어떤 런처를 잡았는지. 플래그 모양이 다르므로 명령을 만들 때 알아야 한다.
+    static var usesCcvWrapper: Bool {
+        URL(fileURLWithPath: ccvExecutablePath).lastPathComponent == "ccv"
     }
 
     /// The terminal resolves `opencode` from the interactive PATH, which puts the
@@ -84,11 +96,14 @@ enum QuickSessionPolicy {
 
     static func launchCommand(
         for launch: QuickLaunch,
-        configuration: QuickSessionConfiguration = .default
+        configuration: QuickSessionConfiguration = .default,
+        usesWrapper: Bool = usesCcvWrapper
     ) -> String {
         switch configuration.harness {
         case .claude:
-            return claudeLaunchCommand(for: launch, configuration: configuration)
+            return claudeLaunchCommand(
+                for: launch, configuration: configuration, usesWrapper: usesWrapper
+            )
         case .codex:
             return codexLaunchCommand(for: launch, configuration: configuration)
         case .opencode:
@@ -100,17 +115,22 @@ enum QuickSessionPolicy {
 
     /// Default mode passes no model or effort flag at all: it is `ccv -y`, the
     /// same command the user types, so Claude Code applies its own settings.
-    private static func claudeLaunchCommand(
+    static func claudeLaunchCommand(
         for launch: QuickLaunch,
-        configuration: QuickSessionConfiguration
+        configuration: QuickSessionConfiguration,
+        usesWrapper: Bool = usesCcvWrapper
     ) -> String {
         var parts = [#"exec "$FINE_CCV""#]
+        // ccv는 -y/-ry로 줄여 받고, claude 본체는 긴 플래그를 받는다.
+        let skipPermissions = usesWrapper ? "-y" : "--dangerously-skip-permissions"
         if case .resume = launch {
-            parts.append(#"-ry "$FINE_RESUME_SESSION_ID""#)
+            parts.append(usesWrapper
+                ? #"-ry "$FINE_RESUME_SESSION_ID""#
+                : #"--resume "$FINE_RESUME_SESSION_ID" --dangerously-skip-permissions"#)
         } else if case .resumeLatest = launch {
-            parts.append("-y --continue")
+            parts.append("\(skipPermissions) --continue")
         } else {
-            parts.append("-y")
+            parts.append(skipPermissions)
         }
         if !configuration.isDefaultModel {
             parts.append(#"--model "$FINE_MODEL" --effort "$FINE_EFFORT""#)

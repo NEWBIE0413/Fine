@@ -463,3 +463,43 @@ extension QuickSessionTests {
         XCTAssertFalse(TerminalSession(snapshot: plain.snapshot()).isNameUserSet)
     }
 }
+
+extension QuickSessionTests {
+    /// `ccv`는 이 저장소를 받은 사람에게 있을 이유가 없는 개인용 런처다.
+    /// 없을 때 `claude`를 직접 부르는 길이 실제로 맞는 플래그를 내보내는지 —
+    /// 이 기계에는 ccv가 있어서 그냥 두면 아무도 지나가지 않는 분기다.
+    func testClaudeLaunchesWithoutTheWrapper() {
+        func command(_ launch: QuickLaunch, usesWrapper: Bool) -> String {
+            QuickSessionPolicy.claudeLaunchCommand(
+                for: launch, configuration: .default, usesWrapper: usesWrapper
+            )
+        }
+
+        XCTAssertTrue(command(.blank, usesWrapper: true).contains(" -y"))
+        XCTAssertTrue(command(.blank, usesWrapper: false).contains("--dangerously-skip-permissions"))
+        XCTAssertFalse(command(.blank, usesWrapper: false).contains(" -y"))
+
+        let resumed = command(.resume(sessionId: "x"), usesWrapper: false)
+        XCTAssertTrue(resumed.contains("--resume \"$FINE_RESUME_SESSION_ID\""))
+        XCTAssertTrue(resumed.contains("--dangerously-skip-permissions"))
+        XCTAssertFalse(resumed.contains("-ry"))
+
+        // 이어하기는 어느 쪽이든 --continue다.
+        XCTAssertTrue(command(.resumeLatest, usesWrapper: false).contains("--continue"))
+        XCTAssertTrue(command(.resumeLatest, usesWrapper: true).contains("--continue"))
+    }
+
+    /// 승인 건너뛰기 플래그는 정확히 한 번만 나와야 한다.
+    func testPermissionFlagAppearsExactlyOnceWithoutTheWrapper() {
+        for launch: QuickLaunch in [.blank, .resumeLatest, .resume(sessionId: "x"),
+                                    .initialPrompt("hi")] {
+            let command = QuickSessionPolicy.claudeLaunchCommand(
+                for: launch, configuration: .default, usesWrapper: false
+            )
+            XCTAssertEqual(
+                command.components(separatedBy: "--dangerously-skip-permissions").count - 1, 1,
+                "\(launch): \(command)"
+            )
+        }
+    }
+}

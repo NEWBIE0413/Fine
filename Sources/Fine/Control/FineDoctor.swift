@@ -73,7 +73,7 @@ enum FineDoctor {
 
     private static func installHint(for harness: QuickHarness) -> String {
         switch harness {
-        case .claude: "ccv 런처를 ~/myworld/ccv 에 두세요"
+        case .claude: "npm i -g @anthropic-ai/claude-code"
         case .codex: "brew install codex"
         case .opencode: "curl -fsSL https://opencode.ai/install | bash"
         case .omp: "bun add -g @oh-my-pi/pi-coding-agent"
@@ -99,7 +99,8 @@ enum FineDoctor {
                 detail: reachable(port: 8009)
                     ? "127.0.0.1:8009 응답함 — 자동 모드와 인사말이 동작합니다"
                     : "127.0.0.1:8009 응답 없음 — 자동 모드는 폴백으로 시작합니다",
-                fix: reachable(port: 8009) ? nil : "~/cld/jev/kev-serve.sh",
+                // 판정 서버는 Fine의 일부가 아니다 — 있으면 쓰고 없으면 없는 대로 돈다.
+                fix: reachable(port: 8009) ? nil : "로컬 System One 서버를 127.0.0.1:8009에 띄우세요",
                 optional: true
             ),
         ]

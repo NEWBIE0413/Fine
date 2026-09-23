@@ -43,9 +43,7 @@ omp는 `~/.omp/agent/config.yml`의 `enabledModels`를 그대로 따른다. 목�
 
 모델·effort를 질문 난이도로 고르는 기능은 로컬 판정 서버가 필요하다.
 
-```sh
-~/cld/jev/kev-serve.sh     # 127.0.0.1:8009
-```
+로컬 System One 서버를 `127.0.0.1:8009`에 띄우면 된다 (예: `jaredpalmer/kev`).
 
 없어도 대화는 정상적으로 시작된다 — 사용자가 마지막에 쓰던 설정으로 떨어질 뿐이다.
 
@@ -90,5 +88,5 @@ fine state                 # 창 상태 덤프
 - **하네스의 인증 파일을 복사하거나 공유하지 않는다.** omp는 Codex OAuth를 자기
   `agent.db`에 별도 체인으로 들고 있고, `~/.codex/auth.json`과 리프레시 토큰이 다르다.
   한쪽을 다른 쪽에 덮으면 양쪽 모두 revoke된다.
-- **`~/cld/Fine-design`에서 빌드한 앱을 설치하지 않는다.** 그쪽은 UI 시안용 스냅샷이고
-  `fine` CLI와 제어 소켓이 없다. 실제 소스는 `~/myworld/Fine`이다.
+- **다른 체크아웃에서 빌드한 앱을 설치하지 않는다.** UI 시안용으로 떠둔 스냅샷에는
+  `fine` CLI와 제어 소켓이 없어, 설치하면 CLI가 통째로 죽는다.
