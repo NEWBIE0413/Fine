@@ -55,9 +55,13 @@ enum QuickAutoRouter {
         fallback: QuickSessionConfiguration
     ) async -> QuickSessionConfiguration {
         guard fallback.harness == .claude else { return fallback }
-        let tiers = ModelTiers(available: available)
+        // 컴포저 목록은 몇 분 단위로만 갱신된다. 오늘 나온 모델을 바로 쓰려면 판정 순간에
+        // Claude Code가 직접 받아 둔 카탈로그를 한 번 더 읽는다(로컬 파일이라 kev 대기에 묻힌다).
+        async let fresh = Task.detached(priority: .userInitiated) { ClaudeModelCatalog.discover() }.value
+        async let pending = ask(state: state(from: prompt))
+        let tiers = ModelTiers(available: available + (await fresh))
         let decision: Decision
-        if let answer = await ask(state: state(from: prompt)) {
+        if let answer = await pending {
             decision = map(answer, tiers: tiers)
         } else {
             decision = Decision(modelID: tiers.mid, effort: .high, routed: false, reason: "kev 응답 없음")
@@ -104,21 +108,38 @@ enum QuickAutoRouter {
         }
     }
 
-    /// 카탈로그에서 세 등급을 짚는다. 라우터가 붙어 있으면 목록이 훨씬 넓으므로 계열 이름으로 찾는다.
+    /// 계열마다 버전이 가장 높은 모델을 짚는다. 목록 순서는 출처(라우터·CLI 카탈로그)마다
+    /// 다르므로 믿지 않는다. 계열이 목록에 없으면 "기본"으로 두어 Claude Code가 고르게 한다 —
+    /// 여기에 모델 ID를 적어 두면 새 모델이 나올 때마다 낡는다.
     struct ModelTiers {
         var low: String
         var mid: String
         var high: String
 
         init(available: [QuickModelOption]) {
-            func pick(_ needle: String, _ fallback: String) -> String {
-                available.first {
-                    $0.harness == .claude && $0.provider == .claude && $0.id.contains(needle)
-                }?.id ?? fallback
+            let claude = available.filter { $0.harness == .claude && $0.provider == .claude }
+            func newest(_ family: String) -> String {
+                claude
+                    .compactMap { option in Self.version(of: option.id, family: family).map { (option.id, $0) } }
+                    .max { $0.1.lexicographicallyPrecedes($1.1) }?
+                    .0 ?? QuickModelOption.defaultID
             }
-            low = pick("haiku", "claude-haiku-4-5")
-            mid = pick("sonnet", "claude-sonnet-5")
-            high = pick("opus", "claude-opus-5")
+            low = newest("haiku")
+            mid = newest("sonnet")
+            high = newest("opus")
+        }
+
+        /// `claude-opus-5-5` → [5, 5], `claude-haiku-4-5-20251001` → [4, 5].
+        /// 8자리 날짜는 스냅샷 표시일 뿐 버전이 아니다. `[1m]` 같은 변형은 버전으로 읽히지 않아 빠진다.
+        static func version(of id: String, family: String) -> [Int]? {
+            let prefix = "claude-\(family)-"
+            guard id.hasPrefix(prefix) else { return nil }
+            var numbers: [Int] = []
+            for part in id.dropFirst(prefix.count).split(separator: "-") {
+                guard let number = Int(part) else { return nil }
+                if part.count < 8 { numbers.append(number) }
+            }
+            return numbers.isEmpty ? nil : numbers
         }
     }
 

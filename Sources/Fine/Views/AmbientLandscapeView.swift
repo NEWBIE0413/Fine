@@ -92,6 +92,9 @@ final class AmbientLandscapeRenderer {
         return result
     }()
 
+    /// Build the glyph atlas outside the first light-theme transition.
+    static func prewarm() { _ = sprites }
+
     func render(at time: TimeInterval) -> CGImage? {
         let cells = AmbientLandscape.frame(at: time)
         changedCellCount = 0

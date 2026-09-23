@@ -16,7 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { FineAppearance.apply(.stored) }
         // 창은 이 시점 이후에 만들어진다. 한 번 더 맞춰야 첫 화면부터 저장된 외형이 된다.
         DispatchQueue.main.async {
-            MainActor.assumeIsolated { FineAppearance.apply(.stored) }
+            MainActor.assumeIsolated {
+                FineAppearance.apply(.stored)
+                // Prepare the user's home artwork after the first launch turn. Its
+                // thumbnail then stays ready for the first light-to-dark switch.
+                _ = HomeSceneImageStore.shared
+                AmbientLandscapeRenderer.prewarm()
+            }
         }
         startControlServer()
     }

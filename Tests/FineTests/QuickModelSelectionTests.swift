@@ -11,13 +11,7 @@ final class QuickModelSelectionTests: XCTestCase {
         XCTAssertFalse(catalog.routerAvailable)
         XCTAssertEqual(
             catalog.models.map(\.id),
-            [
-                QuickModelOption.defaultID,
-                QuickAutoRouter.autoModelID,
-                "claude-opus-5",
-                "claude-sonnet-5",
-                "claude-haiku-4-5",
-            ]
+            [QuickModelOption.defaultID, QuickAutoRouter.autoModelID]
         )
         XCTAssertTrue(catalog.models[0].isDefault)
         XCTAssertFalse(catalog.models[0].requiresProxy)
@@ -90,6 +84,18 @@ final class QuickModelSelectionTests: XCTestCase {
         XCTAssertEqual(models[0].harness, .codex)
         XCTAssertEqual(models[0].provider, .codex)
         XCTAssertFalse(models[0].requiresProxy)
+    }
+
+    /// Codex CLI owns this cache and refreshes it itself. Fine reads exactly what
+    /// it lists — no patched-in model IDs that could go stale.
+    func testCodexDiscoveryReportsExactlyWhatTheCacheLists() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fine-codex-models-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data(#"{"models":[{"slug":"gpt-6-astra","display_name":"GPT-6-Astra","visibility":"list","supported_reasoning_levels":[{"effort":"high"}]}]}"#.utf8).write(to: file)
+
+        let models = CodexModelDiscovery.discover(cacheFile: file)
+        XCTAssertEqual(models.map(\.id), ["gpt-6-astra"])
     }
 
     func testGatewayResponseDecodesClaudeCodexKimiGeminiAndAlibabaModelsOnlyOnce() throws {
@@ -445,6 +451,20 @@ final class ClaudeModelCatalogTests: XCTestCase {
         XCTAssertEqual(sonnet.supportedEfforts, [.low, .medium, .high, .max])
     }
 
+    func testModelsNeedingANewerCLIAreHiddenUntilItUpdates() {
+        let catalog = """
+        {"catalog":{"config":{"models":[
+          {"id":"claude-opus-5-5","name":"Opus 5.5","min_claude_code_version":"2.1.280"},
+          {"id":"claude-opus-5","name":"Opus 5"}
+        ]}}}
+        """
+        let data = Data(catalog.utf8)
+        XCTAssertEqual(ClaudeModelCatalog.parse(data, installedVersion: [2, 1, 279]).map(\.id), ["claude-opus-5"])
+        XCTAssertEqual(ClaudeModelCatalog.parse(data, installedVersion: [2, 1, 280]).map(\.id),
+                       ["claude-opus-5-5", "claude-opus-5"])
+        XCTAssertEqual(ClaudeModelCatalog.parse(data, installedVersion: nil).count, 2)
+    }
+
     func testMalformedOrEmptyCatalogYieldsNothing() {
         XCTAssertTrue(ClaudeModelCatalog.parse(Data("{}".utf8)).isEmpty)
         XCTAssertTrue(ClaudeModelCatalog.parse(Data("not json".utf8)).isEmpty)
@@ -463,5 +483,34 @@ extension ClaudeModelCatalogTests {
         // 제공사 이름이 접두사로 붙는 기존 형태도 그대로 벗겨져야 한다.
         let kimi = QuickModelOption(id: "claude-kimi-k2", displayName: "Kimi · k2")
         XCTAssertEqual(kimi.conciseDisplayName, "k2")
+    }
+}
+
+final class QuickAutoRouterTierTests: XCTestCase {
+    /// 라우터는 새 모델을 맨 위에, CLI 카탈로그는 섹션 순으로 준다. 어느 순서로 와도 최신을 골라야 한다.
+    func testTiersPickTheNewestOfEachFamilyWhateverTheOrder() {
+        let models = [
+            QuickModelOption(id: "claude-opus-4-8", displayName: "Opus 4.8"),
+            QuickModelOption(id: "claude-opus-5", displayName: "Opus 5"),
+            QuickModelOption(id: "claude-haiku-4-5-20251001", displayName: "Haiku 4.5"),
+            QuickModelOption(id: "claude-sonnet-4-6", displayName: "Sonnet 4.6"),
+            QuickModelOption(id: "claude-opus-5-5", displayName: "Opus 5.5"),
+            QuickModelOption(id: "claude-sonnet-5", displayName: "Sonnet 5"),
+            QuickModelOption(id: "claude-codex-gpt-opus-9[1m]", displayName: "Codex · decoy"),
+        ]
+        for list in [models, models.reversed()] {
+            let tiers = QuickAutoRouter.ModelTiers(available: list)
+            XCTAssertEqual(tiers.high, "claude-opus-5-5")
+            XCTAssertEqual(tiers.mid, "claude-sonnet-5")
+            XCTAssertEqual(tiers.low, "claude-haiku-4-5-20251001")
+        }
+    }
+
+    /// 목록에 계열이 없으면 모델 ID를 지어내지 않고 Claude Code의 기본값에 맡긴다.
+    func testMissingFamilyFallsBackToTheCLIDefault() {
+        let tiers = QuickAutoRouter.ModelTiers(available: [QuickModelOption(id: "claude-opus-5-5", displayName: "Opus 5.5")])
+        XCTAssertEqual(tiers.high, "claude-opus-5-5")
+        XCTAssertEqual(tiers.mid, QuickModelOption.defaultID)
+        XCTAssertEqual(tiers.low, QuickModelOption.defaultID)
     }
 }

@@ -154,6 +154,23 @@ extension AppearanceDiagnosticTests {
         XCTAssertNotEqual(NightSceneView.sceneDirectory.path, FinePaths.home.path)
         XCTAssertEqual(NightSceneView.sceneFilenames.first, "home-scene.png")
     }
+
+    func testUserSceneLoadsAtDisplaySize() throws {
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 2400, pixelsHigh: 1200,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fine-scene-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
+
+        let image = try XCTUnwrap(NightSceneView.loadUserImage(at: url))
+        XCTAssertLessThanOrEqual(image.size.width, CGFloat(NightSceneView.maxSceneWidth))
+        XCTAssertEqual(image.size.width / image.size.height, 2, accuracy: 0.01)
+    }
 }
 
 extension AppearanceDiagnosticTests {

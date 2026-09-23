@@ -328,12 +328,11 @@ enum QuickComposerPreferences {
 
 @MainActor
 final class QuickModelCatalog: ObservableObject {
+    /// 모델 이름을 적어 두지 않는다. 적어 둔 목록은 새 모델이 나오는 날부터 틀린다.
+    /// 라우터도 CLI 카탈로그도 없으면 "기본"(Claude Code 자신의 기본 모델)이 곧 최신이다.
     static let claudeFallbackModels: [QuickModelOption] = [
         .defaultOption(for: .claude),
         QuickAutoRouter.autoOption(for: .claude),
-        QuickModelOption(id: "claude-opus-5", displayName: "Opus 5"),
-        QuickModelOption(id: "claude-sonnet-5", displayName: "Sonnet 5"),
-        QuickModelOption(id: "claude-haiku-4-5", displayName: "Haiku 4.5"),
     ]
     static var fallbackModels: [QuickModelOption] { claudeFallbackModels }
 
@@ -433,9 +432,7 @@ final class QuickModelCatalog: ObservableObject {
                     ClaudeCLIModelDiscovery.discover()
                 }.value
                 guard !Task.isCancelled else { return }
-                self?.models = cliModels.isEmpty
-                    ? Self.claudeFallbackModels
-                    : [.defaultOption(for: .claude), QuickAutoRouter.autoOption(for: .claude)] + cliModels
+                self?.models = Self.claudeFallbackModels + cliModels
                 self?.routerAvailable = false
             }
             self?.isLoading = false

@@ -91,6 +91,11 @@ struct AppearanceToggle: View {
     var body: some View {
         Button {
             let next: FineAppearance = isDark ? .light : .dark
+            guard !reduceMotion else {
+                stored = next.rawValue
+                FineAppearance.apply(next)
+                return
+            }
             // 바꾸는 일 자체를 파문에 맡긴다. 파문이 이전 화면을 붙잡아 두고,
             // 지나간 자리부터 새 테마가 드러난다.
             ThemeTransition.ripple(from: center) {

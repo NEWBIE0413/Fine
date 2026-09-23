@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 
 /// 다크 테마의 위쪽에 놓이는 한 장면.
@@ -10,8 +11,7 @@ import SwiftUI
 /// 중간쯤에서 바탕으로 녹아들어야 컴포저가 그 위에 뜬 것처럼 읽힌다.
 struct NightSceneView: View {
     var reduceMotion = false
-    /// 파일을 갈아끼우면 다음에 홈 화면을 열 때 반영된다.
-    @State private var userImage: NSImage? = NightSceneView.loadUserImage()
+    @ObservedObject private var scene = HomeSceneImageStore.shared
 
     /// 배경 그림을 찾는 순서:
     ///
@@ -55,7 +55,7 @@ struct NightSceneView: View {
         GeometryReader { geometry in
             let height = geometry.size.height
             Group {
-                if let image = userImage {
+                if let image = scene.image {
                     sceneImage(Image(nsImage: image))
                 } else if Self.bundledArtwork {
                     sceneImage(Image("HomeScene", bundle: .module))
@@ -80,10 +80,6 @@ struct NightSceneView: View {
             )
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .onAppear { userImage = Self.loadUserImage() }
-        .onReceive(NotificationCenter.default.publisher(for: HomeSceneLibrary.didChange)) { _ in
-            userImage = Self.loadUserImage()
-        }
     }
 
     /// 폭을 꽉 채우고 넘치는 세로는 잘라낸다. 맞춰 넣으면 옆이 비고,
@@ -94,25 +90,48 @@ struct NightSceneView: View {
             .aspectRatio(contentMode: .fill)
     }
 
-    /// 화면이 아무리 넓어도 이 폭이면 충분하다. 원본을 그대로 들고 있으면
-    /// 매 프레임 고품질 보간으로 다시 줄이게 된다.
-    private static let maxSceneWidth: CGFloat = 1800
+    /// 화면이 아무리 넓어도 이 폭이면 충분하다.
+    static let maxSceneWidth = 1800
 
     static func loadUserImage() -> NSImage? {
-        guard let url = userSceneURL, let image = NSImage(contentsOf: url) else { return nil }
-        return downsampled(image)
+        guard let url = userSceneURL else { return nil }
+        return loadUserImage(at: url)
     }
 
-    private static func downsampled(_ image: NSImage) -> NSImage {
-        guard image.size.width > maxSceneWidth else { return image }
-        let scale = maxSceneWidth / image.size.width
-        let size = NSSize(width: maxSceneWidth, height: (image.size.height * scale).rounded())
-        let resized = NSImage(size: size)
-        resized.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(in: NSRect(origin: .zero, size: size))
-        resized.unlockFocus()
-        return resized
+    static func loadUserImage(at url: URL) -> NSImage? {
+        // ImageIO decodes straight to the display size. Loading a full-size NSImage and
+        // drawing it into another image decoded both copies on the main thread.
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [
+            kCGImageSourceShouldCache: false,
+        ] as CFDictionary),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: maxSceneWidth,
+              ] as CFDictionary) else { return nil }
+        return NSImage(cgImage: thumbnail, size: NSSize(width: thumbnail.width, height: thumbnail.height))
+    }
+}
+
+/// The home view is recreated when the appearance changes. Keep its decoded artwork
+/// between light and dark so a theme switch never waits for a file read or resize.
+@MainActor
+final class HomeSceneImageStore: ObservableObject {
+    static let shared = HomeSceneImageStore()
+    @Published private(set) var image: NSImage?
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        image = NightSceneView.loadUserImage()
+        observer = NotificationCenter.default.addObserver(
+            forName: HomeSceneLibrary.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.image = NightSceneView.loadUserImage() }
+        }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 }
 
@@ -121,47 +140,55 @@ struct NightSceneView: View {
 private struct ProceduralNightSky: View {
     var reduceMotion: Bool
 
+    @ViewBuilder
     var body: some View {
-        TimelineView(.animation(minimumInterval: reduceMotion ? nil : 1 / 20)) { timeline in
-            let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.10, blue: 0.26),
-                        Color(red: 0.07, green: 0.13, blue: 0.32),
-                        Color(red: 0.04, green: 0.06, blue: 0.14),
-                    ],
-                    startPoint: .top, endPoint: .bottom
-                )
-
-                // 지평선 위로 번지는 빛. 아주 느리게 숨 쉰다 (0.2Hz 아래는 피한다).
-                let breathe = reduceMotion ? 0.5 : 0.5 + 0.18 * sin(t / 6)
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.30, green: 0.52, blue: 0.96).opacity(0.42 * breathe + 0.16),
-                        Color(red: 0.18, green: 0.28, blue: 0.70).opacity(0.10),
-                        .clear,
-                    ],
-                    center: UnitPoint(x: 0.5, y: 0.74),
-                    startRadius: 10, endRadius: 520
-                )
-
-                Canvas { context, size in
-                    for index in 0..<Stars.points.count {
-                        let star = Stars.points[index]
-                        let phase = reduceMotion ? 0 : sin(t * star.speed + star.phase)
-                        let alpha = star.alpha * (0.62 + 0.38 * (phase * 0.5 + 0.5))
-                        let radius = star.radius
-                        let rect = CGRect(
-                            x: star.x * size.width - radius,
-                            y: star.y * size.height - radius,
-                            width: radius * 2, height: radius * 2
-                        )
-                        context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(alpha)))
-                    }
-                }
-                .blendMode(.plusLighter)
+        if reduceMotion {
+            sky(at: 0)
+        } else {
+            TimelineView(.animation(minimumInterval: 1 / 20)) { timeline in
+                sky(at: timeline.date.timeIntervalSinceReferenceDate)
             }
+        }
+    }
+
+    private func sky(at t: TimeInterval) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.10, blue: 0.26),
+                    Color(red: 0.07, green: 0.13, blue: 0.32),
+                    Color(red: 0.04, green: 0.06, blue: 0.14),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+
+            // 지평선 위로 번지는 빛. 아주 느리게 숨 쉰다 (0.2Hz 아래는 피한다).
+            let breathe = 0.5 + 0.18 * sin(t / 6)
+            RadialGradient(
+                colors: [
+                    Color(red: 0.30, green: 0.52, blue: 0.96).opacity(0.42 * breathe + 0.16),
+                    Color(red: 0.18, green: 0.28, blue: 0.70).opacity(0.10),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.5, y: 0.74),
+                startRadius: 10, endRadius: 520
+            )
+
+            Canvas { context, size in
+                for index in 0..<Stars.points.count {
+                    let star = Stars.points[index]
+                    let phase = sin(t * star.speed + star.phase)
+                    let alpha = star.alpha * (0.62 + 0.38 * (phase * 0.5 + 0.5))
+                    let radius = star.radius
+                    let rect = CGRect(
+                        x: star.x * size.width - radius,
+                        y: star.y * size.height - radius,
+                        width: radius * 2, height: radius * 2
+                    )
+                    context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(alpha)))
+                }
+            }
+            .blendMode(.plusLighter)
         }
     }
 }

@@ -12,7 +12,7 @@ enum ThemeTransition {
     static let originKey = "origin"
     static let snapshotKey = "snapshot"
 
-    static let duration: TimeInterval = 0.72
+    static let duration: TimeInterval = 0.58
 
     /// 창 외형은 한 번에 통째로 바뀐다. 중간 상태가 없으므로 색을 서서히 섞을 수 없다.
     ///
@@ -20,12 +20,15 @@ enum ThemeTransition {
     /// 덮어둔 장면에 구멍을 내어 넓혀간다. 파문이 지나간 자리부터 새 테마가 드러난다.
     @MainActor
     static func ripple(from origin: CGPoint, applying change: () -> Void) {
-        guard let content = NSApp.keyWindow?.contentView else { change(); return }
+        guard let window = NSApp.keyWindow, let content = window.contentView else {
+            change()
+            return
+        }
         let snapshot = snapshot(of: content)
         change()
         var payload: [String: Any] = [originKey: NSValue(point: origin)]
         if let snapshot { payload[snapshotKey] = snapshot }
-        NotificationCenter.default.post(name: begin, object: nil, userInfo: payload)
+        NotificationCenter.default.post(name: begin, object: window, userInfo: payload)
     }
 
     @MainActor
@@ -41,6 +44,7 @@ enum ThemeTransition {
 
 /// 창 전체를 덮는 한 겹. 평소에는 아무것도 그리지 않는다.
 struct ThemeTransitionOverlay: View {
+    let windowStateID: UUID
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var origin: CGPoint?
@@ -51,9 +55,9 @@ struct ThemeTransitionOverlay: View {
     /// 안쪽에서 바깥으로 갈수록 옅어지는 글자들. 굵은 블록은 쓰지 않는다 —
     /// 화면을 덮는 것이 아니라 스쳐 지나가는 파문이라야 한다.
     private static let ramp: [String] = ["╬", "╫", "┼", "╋", "┿", "─", "·", "˙"]
-    private static let cell = CGSize(width: 11, height: 17)
+    private static let cell = CGSize(width: 13, height: 19)
     /// 파문이 한 번에 걸치는 두께. 좁으면 선처럼, 넓으면 안개처럼 보인다.
-    static let bandWidth: CGFloat = 96
+    static let bandWidth: CGFloat = 82
 
     var body: some View {
         GeometryReader { geometry in
@@ -71,18 +75,19 @@ struct ThemeTransitionOverlay: View {
                             if let snapshot {
                                 Image(nsImage: snapshot)
                                     .resizable()
-                                    .interpolation(.none)
                                     .frame(width: geometry.size.width, height: geometry.size.height)
                                     .mask(
-                                        // 사각형에서 자라나는 원을 도려낸다.
-                                        Canvas { context, size in
-                                            var hole = Path(CGRect(origin: .zero, size: size))
-                                            hole.addPath(Path(ellipseIn: CGRect(
-                                                x: origin.x - radius, y: origin.y - radius,
-                                                width: radius * 2, height: radius * 2
-                                            )))
-                                            context.fill(hole, with: .color(.black), style: FillStyle(eoFill: true))
-                                        }
+                                        // A narrow feather makes the old frame recede without
+                                        // blurring or re-rendering the entire window.
+                                        RadialGradient(
+                                            colors: [.clear, .white],
+                                            center: UnitPoint(
+                                                x: origin.x / geometry.size.width,
+                                                y: origin.y / geometry.size.height
+                                            ),
+                                            startRadius: max(0, radius - 14),
+                                            endRadius: radius + 22
+                                        )
                                     )
                             }
                             Canvas { context, size in
@@ -102,6 +107,8 @@ struct ThemeTransitionOverlay: View {
         .accessibilityHidden(true)
         .onReceive(NotificationCenter.default.publisher(for: ThemeTransition.begin)) { note in
             guard !reduceMotion,
+                  let window = note.object as? NSWindow,
+                  window.identifier == WindowIdentity.identifier(for: windowStateID),
                   let value = note.userInfo?[ThemeTransition.originKey] as? NSValue else { return }
             origin = value.pointValue
             snapshot = note.userInfo?[ThemeTransition.snapshotKey] as? NSImage
@@ -124,7 +131,9 @@ struct ThemeTransitionOverlay: View {
 
     /// 끝에서 급히 멈추면 파문이 벽에 부딪힌 것처럼 보인다. 감속해서 빠져나간다.
     static func radius(progress: Double, reach: CGFloat) -> CGFloat {
-        let eased = 1 - pow(1 - progress, 2.2)
+        // Cover the nearby home content in the first moments, then slow gently
+        // as the edge leaves the window.
+        let eased = 1 - pow(1 - progress, 3.1)
         return eased * (reach + bandWidth)
     }
 
@@ -137,12 +146,24 @@ struct ThemeTransitionOverlay: View {
         guard fade > 0.01 else { return }
 
         let ink = colorScheme == .dark ? Color.white : Color.black
-        let columns = Int(ceil(size.width / Self.cell.width))
-        let rows = Int(ceil(size.height / Self.cell.height))
+        // Resolve the eight glyphs once per frame. Creating and shaping a Text
+        // for every visible cell made the transition compete with the home scene.
+        let glyphs = Self.ramp.map {
+            context.resolve(Text($0)
+                .font(.system(size: 12, weight: .light, design: .monospaced))
+                .foregroundColor(ink))
+        }
+        let firstRow = max(0, Int(floor((origin.y - radius) / Self.cell.height)))
+        let lastRow = min(Int(ceil(size.height / Self.cell.height)),
+                          Int(ceil((origin.y + radius) / Self.cell.height)))
+        let firstColumn = max(0, Int(floor((origin.x - radius) / Self.cell.width)))
+        let lastColumn = min(Int(ceil(size.width / Self.cell.width)),
+                             Int(ceil((origin.x + radius) / Self.cell.width)))
+        guard firstRow <= lastRow, firstColumn <= lastColumn else { return }
 
-        for row in 0...rows {
+        for row in firstRow...lastRow {
             let y = CGFloat(row) * Self.cell.height
-            for column in 0...columns {
+            for column in firstColumn...lastColumn where (row + column).isMultiple(of: 2) {
                 let x = CGFloat(column) * Self.cell.width
                 let distance = hypot(x - origin.x, y - origin.y)
                 let offset = radius - distance
@@ -151,14 +172,11 @@ struct ThemeTransitionOverlay: View {
                 let depth = offset / Self.bandWidth
                 let index = min(Self.ramp.count - 1, Int(depth * Double(Self.ramp.count)))
                 // 앞머리가 가장 진하고 뒤로 갈수록 사라진다.
-                let alpha = (1 - depth) * fade * 0.75
+                let alpha = (1 - depth) * fade * 0.58
                 guard alpha > 0.015 else { continue }
-                context.draw(
-                    Text(Self.ramp[index])
-                        .font(.system(size: 12, weight: .light, design: .monospaced))
-                        .foregroundStyle(ink.opacity(alpha)),
-                    at: CGPoint(x: x, y: y)
-                )
+                var glyphContext = context
+                glyphContext.opacity = alpha
+                glyphContext.draw(glyphs[index], at: CGPoint(x: x, y: y))
             }
         }
     }

@@ -35,7 +35,10 @@ enum ClaudeModelCatalog {
             }
     }
 
-    static func parse(_ data: Data) -> [QuickModelOption] {
+    /// 카탈로그는 설치된 CLI보다 먼저 새 모델을 싣는다(`min_claude_code_version`).
+    /// 아직 업데이트되지 않은 CLI에 그 모델을 넘기면 세션이 시작부터 실패하므로 걸러 낸다.
+    /// 설치 버전을 모르면 거르지 않는다 — 막는 쪽보다 보여 주는 쪽이 덜 해롭다.
+    static func parse(_ data: Data, installedVersion: [Int]? = installedCLIVersion()) -> [QuickModelOption] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let catalog = root["catalog"] as? [String: Any],
               let config = catalog["config"] as? [String: Any],
@@ -44,6 +47,7 @@ enum ClaudeModelCatalog {
         return models.compactMap { model in
             guard let id = model["id"] as? String, id.hasPrefix("claude-"),
                   let name = model["name"] as? String, !name.isEmpty,
+                  runs(on: installedVersion, minimum: model["min_claude_code_version"] as? String),
                   seen.insert(id).inserted else { return nil }
             return QuickModelOption(
                 id: id,
@@ -52,6 +56,24 @@ enum ClaudeModelCatalog {
                 harness: .claude
             )
         }
+    }
+
+    /// 설치 관리자는 `~/.local/bin/claude`를 `…/versions/2.1.280`으로 잇는다. 프로세스를 띄우지 않고 읽는다.
+    static func installedCLIVersion(
+        executable: URL = FinePaths.home.appendingPathComponent(".local/bin/claude")
+    ) -> [Int]? {
+        version(executable.resolvingSymlinksInPath().lastPathComponent)
+    }
+
+    static func runs(on installed: [Int]?, minimum: String?) -> Bool {
+        guard let installed, let minimum, let required = version(minimum) else { return true }
+        return !installed.lexicographicallyPrecedes(required)
+    }
+
+    static func version(_ text: String) -> [Int]? {
+        let parts = text.split(separator: ".").map { Int($0) }
+        guard parts.count >= 2, parts.allSatisfy({ $0 != nil }) else { return nil }
+        return parts.compactMap { $0 }
     }
 
     /// `thinking.type`이 `none`이면 고를 깊이가 없다는 뜻이고, 그때는 빈 목록이어야
