@@ -11,9 +11,19 @@ struct QuickSidebarView: View {
 
     private var palette: FinePalette { .resolve(colorScheme) }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
+    private static let rowHeight: CGFloat = 37
+    /// "새 대화"와 구역 머리글이 밀려나면 안 되므로 그만큼은 남겨둔다.
+    private static let reservedForChrome: CGFloat = 108
+
+    /// 열린 대화가 사이드바의 9할까지 가져간다. 최근 목록은 그 아래 남은 자리를 쓴다 —
+    /// 지금 하는 일이 먼저고 지난 것은 나중이다.
+    private func openListHeight(in total: CGFloat) -> CGFloat {
+        let ceiling = max(Self.rowHeight, total * 0.9 - Self.reservedForChrome)
+        return min(ceiling, CGFloat(appState.sessions.count) * Self.rowHeight)
+    }
+
+    private var newConversationRow: some View {
+        HStack(spacing: 4) {
             Button {
                 appState.showHome()
             } label: {
@@ -39,10 +49,16 @@ struct QuickSidebarView: View {
             .onHover { isHoveringNew = $0 }
             .animation(.easeOut(duration: 0.14), value: isHoveringNew)
 
-                AppearanceToggle()
-            }
-            .padding(.horizontal, FineTheme.sidebarInset)
-            .padding(.top, FineTheme.titlebarClearance)
+            AppearanceToggle()
+        }
+        .padding(.horizontal, FineTheme.sidebarInset)
+    }
+
+    var body: some View {
+        // 열린 대화가 얼마나 차지할지는 사이드바 높이에 달려 있다.
+        GeometryReader { geometry in
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: FineTheme.titlebarClearance)
 
             if !appState.sessions.isEmpty {
                 QuickSectionHeader(title: "열린 대화") {
@@ -89,8 +105,14 @@ struct QuickSidebarView: View {
                     }
                     .padding(.horizontal, FineTheme.sidebarInset)
                 }
-                .frame(height: min(208, CGFloat(appState.sessions.count) * 37))
+                .frame(height: openListHeight(in: geometry.size.height))
             }
+
+            // "새 대화"는 열린 대화 아래에 온다. 위에 있으면 대화가 늘어날수록
+            // 지금 붙들고 있는 일이 아래로 밀려난다.
+            newConversationRow
+                .padding(.top, appState.sessions.isEmpty ? 0 : 6)
+                .padding(.bottom, 2)
 
             ZStack(alignment: .bottom) {
                 if recentExpanded {
@@ -118,7 +140,8 @@ struct QuickSidebarView: View {
             .clipped()
             .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 1), value: recentExpanded)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
         .background { GlassSidebarBackground() }
         .onAppear {
             recentScanner.start()

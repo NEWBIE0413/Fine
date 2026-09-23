@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var appState: AppState
     @Environment(\.openWindow) private var openWindow
     @AppStorage("fineAppearance") private var appearance = FineAppearance.system.rawValue
+    @AppStorage("sidebarWidth") private var sidebarWidth = Double(FineTheme.sidebarWidth)
 
     init(windowStateID: Binding<UUID?> = .constant(nil)) {
         _sceneWindowStateID = windowStateID
@@ -17,7 +18,9 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 0) {
             QuickSidebarView()
-                .frame(width: FineTheme.sidebarWidth)
+                .frame(width: sidebarWidth)
+
+            SidebarDivider(width: $sidebarWidth)
 
             ZStack {
                 if let session = appState.selectedSession {

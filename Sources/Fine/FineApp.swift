@@ -85,8 +85,10 @@ struct FineCommands: Commands {
             }
             .keyboardShortcut("n", modifiers: .command)
 
+            // 빈 탭을 만드는 대신 새 대화 화면으로 간다 — 거기서 하네스와 모델을
+            // 고르고 시작하는 것이 이 앱에서 대화를 여는 방식이다.
             Button("New Conversation") {
-                appState?.addSession()
+                appState?.showHome()
             }
             .keyboardShortcut("t", modifiers: .command)
         }
