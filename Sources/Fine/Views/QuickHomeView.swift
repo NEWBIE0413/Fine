@@ -193,11 +193,11 @@ struct QuickHomeView: View {
 
     private func find(_ query: String) {
         guard !findStatus.isBusy else { return }
-        animateFind { findStatus = .gathering(query: query, fraction: 0) }
-        SessionFinder.find(query, from: appState, open: false, reading: { fraction in
-            findStatus = .gathering(query: query, fraction: fraction)
-        }, asking: { count in
-            findStatus = .asking(query: query, count: count, since: Date())
+        // 경과 초는 찾기를 시작한 때부터 끝까지 한 줄로 센다. 단계가 바뀐다고 0으로 돌아가지 않는다.
+        let started = Date()
+        animateFind { findStatus = .gathering(query: query, since: started) }
+        SessionFinder.find(query, from: appState, open: false, asking: { count in
+            findStatus = .asking(query: query, count: count, since: started)
         }) { outcome in
             switch outcome {
             case .found(let candidate, _):

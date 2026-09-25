@@ -94,9 +94,7 @@ final class SessionFinderTests: XCTestCase {
 
         let done = expectation(description: "gathered")
         var result: [SessionFinder.Candidate] = []
-        var fractions: [Double] = []
-        SessionFinder.gather(query: "팬 소리", openSessionIDs: [older], directory: directory, store: nil,
-                             progress: { fractions.append($0) }) {
+        SessionFinder.gather(query: "팬 소리", openSessionIDs: [older], directory: directory, store: nil) {
             result = $0
             done.fulfill()
         }
@@ -106,7 +104,6 @@ final class SessionFinderTests: XCTestCase {
         XCTAssertEqual(result.map(\.isOpen), [false, true])
         XCTAssertEqual(result.first?.prompts, ["Mac 발열 문제", "팬 소리가 커"])
         XCTAssertEqual(result.first?.passages.count, 1)
-        XCTAssertEqual(fractions.last, 1, "reading reports its real share up to the end")
     }
 
     // MARK: - 질문

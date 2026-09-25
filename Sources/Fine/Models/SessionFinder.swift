@@ -61,8 +61,7 @@ enum SessionFinder {
     nonisolated(unsafe) private static var index = TranscriptTitleIndex()
     nonisolated(unsafe) private static var digests: [String: (stamp: Stamp, digest: Digest)] = [:]
 
-    /// 최근 대화 후보. 무거운 읽기는 백그라운드에서 하고, 진행과 결과는 메인 스레드로 알린다.
-    /// - Parameter progress: 읽은 대화 수 / 전체 (0…1).
+    /// 최근 대화 후보. 무거운 읽기는 백그라운드에서 하고, 결과는 메인 스레드로 돌려준다.
     static func gather(
         query: String,
         openSessionIDs: Set<String>,
@@ -70,7 +69,6 @@ enum SessionFinder {
         directory: URL = QuickConversationScanner.defaultTranscriptsDirectory(),
         store: HarnessSessionStore? = .local,
         workingDirectory: String = QuickSessionPolicy.workingDirectory,
-        progress: ((Double) -> Void)? = nil,
         completion: @escaping ([Candidate]) -> Void
     ) {
         queue.async {
@@ -80,22 +78,14 @@ enum SessionFinder {
             let others = store?.recentConversations(workingDirectory: workingDirectory, limit: limit) ?? []
             let conversations = Array(QuickConversationScanner.merged(claude, others).prefix(limit))
             let terms = keywords(in: query)
-            var candidates: [Candidate] = []
-            var reported = -1
-            for (offset, conversation) in conversations.enumerated() {
+            let candidates = conversations.map { conversation in
                 let digest = cachedDigest(for: conversation, store: store)
-                candidates.append(Candidate(
+                return Candidate(
                     conversation: conversation,
                     prompts: sample(digest.prompts, terms: terms, count: promptsPerCandidate),
                     passages: passages(in: digest.corpus, terms: terms, limit: passagesPerCandidate),
                     isOpen: openSessionIDs.contains(conversation.id)
-                ))
-                // 퍼센트가 한 칸씩 오를 때만 알린다. 대화마다 메인 스레드를 깨울 이유는 없다.
-                let percent = (offset + 1) * 100 / max(1, conversations.count)
-                if percent != reported, let progress {
-                    reported = percent
-                    DispatchQueue.main.async { progress(Double(percent) / 100) }
-                }
+                )
             }
             if digests.count > limit * 3 {
                 let keep = Set(conversations.map(\.listID))
@@ -417,11 +407,10 @@ extension SessionFinder {
     @MainActor
     static func find(
         _ query: String, from state: AppState, open shouldOpen: Bool = true,
-        reading: ((Double) -> Void)? = nil,
         asking: ((Int) -> Void)? = nil,
         completion: @escaping (Outcome) -> Void
     ) {
-        gather(query: query, openSessionIDs: openSessionIDs(), progress: { reading?($0) }) { candidates in
+        gather(query: query, openSessionIDs: openSessionIDs()) { candidates in
             asking?(candidates.count)
             ask(query: query, candidates: candidates) { outcome in
                 if shouldOpen, case .found(let candidate, _) = outcome {
