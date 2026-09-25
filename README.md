@@ -55,6 +55,7 @@ Fine gives you a command line instead:
 fine doctor            # what is ready, what is missing, how to fix it
 fine appearance dark   # applies immediately
 fine tabs              # what is open
+fine find zeb browser  # Haiku picks it from recent conversations and reopens it (⌘F at home)
 ```
 
 Written to be read and run by a coding agent as much as by you —

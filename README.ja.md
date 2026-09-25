@@ -55,6 +55,7 @@ ditto .build/Fine.app /Applications/Fine.app
 fine doctor            # 何が整い、何が足りないか、そして埋める方法
 fine appearance dark   # すぐ反映されます
 fine tabs              # いま何が開いているか
+fine find zebブラウザを作った会話   # 最近の会話からHaikuが選んで開き直します（ホームで⌘F）
 ```
 
 人が読んでもよく、コーディングエージェントがそのまま実行してもよいように

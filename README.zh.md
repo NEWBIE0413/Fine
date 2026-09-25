@@ -52,6 +52,7 @@ ditto .build/Fine.app /Applications/Fine.app
 fine doctor            # 哪些已就绪、哪些还缺，以及怎么补上
 fine appearance dark   # 立即生效
 fine tabs              # 现在开着什么
+fine find 做 zeb 浏览器的那次对话   # 由 Haiku 从最近的对话里挑出来重新打开（主页按 ⌘F）
 ```
 
 它既写给人读，也写给编程智能体直接执行。具体步骤见

@@ -18,6 +18,7 @@ fine — Fine을 터미널에서 조작한다
   fine new [--harness H] [--model M] [--effort E] [--proxy] [prompt…]
                                             새 대화 (지정 안 한 값은 컴포저의 현재 기본값)
   fine resume <session-id> [--harness H]    대화 이어서 열기
+  fine find <설명…> [--dry-run]              찾기 모드: Haiku가 최근 대화에서 골라 연다 (열린 탭이면 그 탭으로)
   fine restart <tab> [--model M] [--effort E]
                                             같은 대화를 다른 모델로 재시작
 
@@ -40,6 +41,7 @@ fine — Fine을 터미널에서 조작한다
   fine models [--harness H]                 하네스가 아는 모델·effort
   fine state                                window-states.json 덤프
   fine appearance [system|light|dark]       외형 조회/변경 (즉시 적용)
+  fine appearance toggle                    토글과 같이 파문으로 뒤집기 (걸린 시간 ms 보고)
   fine doctor                               준비 상태와 빠진 것을 채우는 명령
   fine theme <tab>                          그 탭의 터미널이 실제로 쓰는 색
   fine ping
@@ -125,6 +127,7 @@ while i < argv.count {
     case "--no-focus": noFocus = true
     case "-w", "--window": i += 1; windowArg = i < argv.count ? argv[i] : nil
     case "--proxy": flags["proxy"] = "true"
+    case "--dry-run": flags["dry-run"] = "true"
     case "--harness", "--model", "--effort", "-n", "--limit":
         i += 1; flags[a.hasPrefix("--") ? String(a.dropFirst(2)) : "limit"] = i < argv.count ? argv[i] : ""
     case "-h", "--help", "help": print(usage); exit(0)
@@ -183,6 +186,12 @@ do {
     case ("resume", _):
         guard let id = sub else { throw CLIError(message: "usage: fine resume <session-id>") }
         command = "session.resume"; args["id"] = id
+    case ("find", _):
+        // 따옴표 없이 써도 되게 나머지 단어를 전부 설명으로 받는다.
+        let query = ([sub].compactMap { $0 } + rest).joined(separator: " ")
+        guard !query.isEmpty else { throw CLIError(message: "usage: fine find <설명…> [--dry-run]") }
+        command = "session.find"; args["query"] = query
+        if flags["dry-run"] != nil { args["open"] = false }
     case ("restart", _):
         guard let tab = sub else { throw CLIError(message: "usage: fine restart <tab> [--model M] [--effort E]") }
         command = "tab.restart"; args["tab"] = tab; modelFlags()
@@ -194,6 +203,9 @@ do {
     case ("transcript", _):
         guard let tab = sub else { throw CLIError(message: "usage: fine transcript <tab> [-n N]") }
         command = "tab.transcript"; args["tab"] = tab; args["limit"] = Int(flags["limit"] ?? "20") ?? 20
+    case ("appearance", "toggle"):
+        // 사이드바 토글과 같다: 파문과 함께 뒤집고, 스냅샷·적용·출발 지연(ms)을 돌려준다.
+        command = "appearance.toggle"
     case ("appearance", _):
         command = "appearance"
         // 값을 안 주면 현재 상태만 묻는다.
@@ -268,6 +280,14 @@ func render(command: String, result: Any) -> String {
     case "tab.select", "tab.next", "tab.prev", "tab.restart", "session.new", "session.resume":
         guard let t = result as? [String: Any] else { return "\(result)" }
         return table([header, tabRow(Int(str(t["index"])) ?? 0, t)])
+    case "session.find":
+        guard let dict = result as? [String: Any] else { return "\(result)" }
+        let reason = str(dict["reason"])
+        guard str(dict["found"]) == "yes" else {
+            return "못 찾음 (\(str(dict["candidates"]))개 중)" + (reason.isEmpty ? "" : " — \(reason)")
+        }
+        let action = str(dict["opened"]) == "yes" ? (str(dict["wasOpen"]) == "yes" ? "탭으로 이동" : "이어서 엶") : "찾기만 함"
+        return "\(str(dict["title"]))  [\(str(dict["harness"])) \(str(dict["id"]))]\n\(action) · \(reason)"
     case "conversations.list":
         let rows = (result as? [[String: Any]] ?? []).map { c in [str(c["harness"]), str(c["id"]), String(str(c["modifiedAt"]).prefix(16)), str(c["title"])] }
         return table([["harness", "session-id", "modified", "title"]] + rows)

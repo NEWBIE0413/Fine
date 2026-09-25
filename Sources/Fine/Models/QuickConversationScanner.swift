@@ -116,7 +116,7 @@ final class QuickConversationScanner: ObservableObject {
         }
     }
 
-    private static func scanClaude(
+    static func scanClaude(
         directory: URL, limit: Int, tracked: Set<String>, index: inout TranscriptTitleIndex
     ) -> (rows: [QuickConversation], titles: [String: String], hasMore: Bool) {
         let files = (try? FileManager.default.contentsOfDirectory(

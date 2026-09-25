@@ -148,6 +148,11 @@ struct QuickHomePresentation<Content: View>: View {
 
 struct QuickHomeComposer<Controls: View>: View {
     @Binding var prompt: String
+    /// 찾기 모드에서는 같은 입력칸이 "무엇을 찾는지"를 받는다.
+    var placeholder = "무엇이든 물어보세요"
+    var accessibilityName = "새 대화 메시지"
+    /// 값이 바뀔 때마다 테두리가 한 번 빛나고 사라진다. 모드가 바뀐 것을 그 자리에서 알린다.
+    var flash = 0
     @FocusState private var isPromptFocused: Bool
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
@@ -156,7 +161,7 @@ struct QuickHomeComposer<Controls: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TextField("무엇이든 물어보세요", text: $prompt, axis: .vertical)
+            TextField(placeholder, text: $prompt, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
                 .fineTracking(16)
@@ -164,7 +169,7 @@ struct QuickHomeComposer<Controls: View>: View {
                 .lineLimit(3...8)
                 .focused($isPromptFocused)
                 .onSubmit(onSubmit)
-                .accessibilityLabel("새 대화 메시지")
+                .accessibilityLabel(accessibilityName)
                 .frame(minHeight: 88, alignment: .topLeading)
                 .padding(22)
 
@@ -172,13 +177,65 @@ struct QuickHomeComposer<Controls: View>: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 14)
         }
-        .background { glass }
-        .shadow(color: palette.shadow, radius: palette.isDark ? 34 : 24, y: palette.isDark ? 16 : 10)
+        // 그림자는 유리 판만 드리운다. 묶음 전체에 걸면 입력칸과 컨트롤 하나하나가
+        // 그림자 계산에 들어가, 화면을 한 장 찍을 때(테마 전환 물결) 0.9~1.7초가 걸렸다.
+        .background {
+            ZStack {
+                shadowCaster
+                glass
+            }
+        }
+        .overlay { flashRing }
         .onAppear { isPromptFocused = true }
         .environment(\.finePalette, palette)
     }
 
     private var palette: FinePalette { .resolve(colorScheme) }
+
+    /// 한 번 켜졌다 꺼지는 테두리. 켜진 채로 두면 모드 표시가 아니라 경고처럼 읽힌다 —
+    /// 계속 남는 표시는 "찾기 · Haiku" 알약이 맡는다.
+    @ViewBuilder
+    private var flashRing: some View {
+        if flash > 0 {
+            let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+            ZStack {
+                shape.fill(FineTheme.findAccent.opacity(0.07))
+                shape.strokeBorder(FineTheme.findAccent, lineWidth: 1.5)
+                    .shadow(color: FineTheme.findAccent.opacity(0.55), radius: 12)
+            }
+            .keyframeAnimator(initialValue: 0.0, trigger: flash) { ring, glow in
+                ring.opacity(glow)
+            } keyframes: { _ in
+                KeyframeTrack {
+                    CubicKeyframe(1, duration: 0.14)
+                    CubicKeyframe(1, duration: 0.22)
+                    CubicKeyframe(0, duration: 0.9)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// 그림자만 드리우는 판. 유리(머티리얼 포함)에 그림자를 걸면 흐림 위에 흐림을 한 번 더
+    /// 계산하게 된다. 같은 모양의 불투명한 판이 그림자를 맡고, 판 자체는 유리 바깥만 남긴다 —
+    /// 안쪽까지 남기면 반투명한 유리 너머로 판 색이 비친다.
+    private var shadowCaster: some View {
+        let radius: CGFloat = palette.isDark ? 34 : 24
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        return shape.fill(.black)
+            .shadow(color: palette.shadow, radius: radius, y: palette.isDark ? 16 : 10)
+            .mask {
+                GeometryReader { geometry in
+                    let bounds = CGRect(origin: .zero, size: geometry.size)
+                    Path { path in
+                        path.addRect(bounds.insetBy(dx: -radius * 3, dy: -radius * 3))
+                        path.addPath(shape.path(in: bounds))
+                    }
+                    .fill(style: FillStyle(eoFill: true))
+                }
+            }
+    }
 
     /// 큰 표면일수록 두꺼워 보여야 한다 — 어두운 쪽은 실제 블러를 쓰고,
     /// 위쪽 모서리만 밝게 해서 빛을 받는 유리로 읽히게 한다.

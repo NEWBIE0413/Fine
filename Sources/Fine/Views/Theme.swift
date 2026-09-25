@@ -14,20 +14,44 @@ enum FineTheme {
     static let composerCornerRadius: CGFloat = 14
     static let homeContentWidth: CGFloat = 680
 
+    // 여기 색들은 뷰마다 colorScheme을 읽지 않고 상수로 쓰인다. 그래서 값 자체가
+    // 창의 외형을 따라 풀려야 한다 — 검정 5%는 어두운 바탕에서 보이지 않고,
+    // 흰 면은 어두운 패널 위에서 혼자 불을 켠 것처럼 튄다.
     static let workspace = Color(nsColor: .textBackgroundColor)
-    static let divider = Color.black.opacity(0.07)
-    static let hoverFill = Color.black.opacity(0.04)
-    static let selectedFill = Color.white.opacity(0.62)
-    static let selectedRim = Color.white.opacity(0.72)
-    static let controlFill = Color.black.opacity(0.05)
-    static let pickerRailFill = Color.black.opacity(0.018)
-    static let overlayScrim = Color.black.opacity(0.06)
-    static let overlayShadow = Color.black.opacity(0.14)
+    static let divider = Color.adaptive(light: FinePalette.light.divider, dark: FinePalette.dark.divider)
+    static let hoverFill = Color.adaptive(light: .black.opacity(0.04), dark: .white.opacity(0.05))
+    static let selectedFill = Color.adaptive(light: FinePalette.light.selectedFill, dark: FinePalette.dark.selectedFill)
+    static let selectedRim = Color.adaptive(light: FinePalette.light.selectedRim, dark: FinePalette.dark.selectedRim)
+    static let controlFill = Color.adaptive(light: FinePalette.light.controlFill, dark: FinePalette.dark.controlFill)
+    static let pickerRailFill = Color.adaptive(light: .black.opacity(0.018), dark: .white.opacity(0.025))
+    /// 피커 레일에서 고른 칸. 밝은 쪽은 흰 면이 레일 위로 떠오르고, 어두운 쪽은 한 단만 밝힌다.
+    static let pickerSelection = Color.adaptive(light: .white, dark: .white.opacity(0.11))
+    static let overlayScrim = Color.adaptive(light: .black.opacity(0.06), dark: .black.opacity(0.32))
+    static let overlayShadow = Color.adaptive(light: .black.opacity(0.14), dark: .black.opacity(0.5))
     static let overlayCornerRadius: CGFloat = 12
     static let glassSheenTop = Color.white.opacity(0.30)
     static let glassSheenMiddle = Color.white.opacity(0.10)
     static let glassTintBottom = Color(nsColor: .windowBackgroundColor).opacity(0.08)
-    static let glassEdge = Color.black.opacity(0.08)
+    static let glassEdge = Color.adaptive(light: .black.opacity(0.08), dark: .white.opacity(0.10))
+    /// 보내기 버튼. 어두운 쪽에서 짙은 녹색은 바탕에 묻히므로 밝은 면에 어두운 화살표로 뒤집는다.
+    static let sendFill = Color.adaptive(light: Color(red: 0.22, green: 0.27, blue: 0.23), dark: FinePalette.dark.ink)
+    static let sendInk = Color.adaptive(light: .white, dark: FinePalette.dark.base)
+    /// 찾기 모드의 색. 대화를 시작하는 초록과 겹치지 않게 푸른 쪽으로 둔다.
+    static let findAccent = Color.adaptive(
+        light: Color(red: 0.24, green: 0.45, blue: 0.66),
+        dark: Color(red: 0.47, green: 0.64, blue: 1.0)
+    )
+}
+
+extension Color {
+    /// 창의 실제 외형에 따라 풀리는 색. SwiftUI는 이 NSColor를 그리는 자리의
+    /// 외형으로 풀어내므로, 정적 상수로 두어도 테마를 따라간다.
+    static func adaptive(light: Color, dark: Color) -> Color {
+        let light = NSColor(light), dark = NSColor(dark)
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        })
+    }
 }
 
 /// 인사말처럼 큰 글자의 서체. 밝은 쪽에는 세리프가 어울리지만 어두운 쪽에서는

@@ -55,6 +55,7 @@ ditto .build/Fine.app /Applications/Fine.app
 fine doctor            # 뭐가 준비됐고 뭐가 빠졌는지, 그리고 채우는 방법
 fine appearance dark   # 바로 반영됩니다
 fine tabs              # 지금 뭐가 열려 있는지
+fine find zeb 브라우저 만든 세션   # 최근 대화에서 Haiku가 골라 다시 엽니다 (홈에서 ⌘F)
 ```
 
 사람이 읽어도 되고 코딩 에이전트가 그대로 실행해도 됩니다.

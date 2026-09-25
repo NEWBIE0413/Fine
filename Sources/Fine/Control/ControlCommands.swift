@@ -181,7 +181,7 @@ enum ControlCommands {
             let data = try JSONEncoder.pretty.encode(WindowStateStorage.shared.states)
             return try JSONSerialization.jsonObject(with: data)
 
-        case "conversations.list", "models.list", "session.new", "session.resume", "window.new", "tab.read", "tab.theme", "tab.transcript":
+        case "appearance.toggle", "session.find", "conversations.list", "models.list", "session.new", "session.resume", "window.new", "tab.read", "tab.theme", "tab.transcript":
             throw fail("internal: async command reached sync dispatcher")
         default:
             throw fail("unknown command: \(r.command)")
@@ -197,6 +197,54 @@ enum ControlCommands {
         case "window.new":
             openWindow { entry in
                 completion(entry.map { .ok(describe($0, index: liveWindows().count - 1)) } ?? .error("window did not appear"))
+            }
+            return true
+
+        case "appearance.toggle":
+            // 사이드바의 토글과 같은 길: 토글 자리에서 파문을 일으키고, 끝나면 잰 값을 돌려준다.
+            let window = NSApp.keyWindow ?? liveWindows().first?.window
+            let isDark = (window?.effectiveAppearance ?? NSApp.effectiveAppearance)
+                .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let next: FineAppearance = isDark ? .light : .dark
+            let apply = {
+                UserDefaults.standard.set(next.rawValue, forKey: FineAppearance.storageKey)
+                FineAppearance.apply(next)
+            }
+            let origin = ThemeTransition.toggleCenter ?? CGPoint(x: FineTheme.sidebarWidth - 24, y: 56)
+            let rippled = ThemeTransition.ripple(from: origin, in: window, applying: apply) { timing in
+                completion(.ok(timing.dictionary.merging(["mode": next.rawValue, "ripple": true]) { $1 }))
+            }
+            if !rippled { completion(.ok(["mode": next.rawValue, "ripple": false])) }
+            return true
+
+        case "session.find":
+            guard let query = r.string("query"), !query.isEmpty else { throw fail("query required") }
+            let (entry, _) = try window(r)
+            let shouldOpen = r.bool("open") ?? true
+            let started = Date()
+            var count = 0
+            SessionFinder.find(query, from: entry.state, open: shouldOpen, progress: { count = $0 }) { outcome in
+                var result: [String: Any] = [
+                    "query": query, "candidates": count, "ms": Int(Date().timeIntervalSince(started) * 1000),
+                ]
+                switch outcome {
+                case .found(let candidate, let reason):
+                    result["found"] = true
+                    result["id"] = candidate.conversation.id
+                    result["title"] = candidate.conversation.title
+                    result["harness"] = candidate.conversation.harness.rawValue
+                    result["wasOpen"] = candidate.isOpen
+                    result["opened"] = shouldOpen
+                    result["reason"] = reason
+                    if shouldOpen, r.bool("focus") ?? true { NSApp.activate(ignoringOtherApps: true) }
+                case .notFound(let reason):
+                    result["found"] = false
+                    result["reason"] = reason
+                case .failed(let message):
+                    completion(.error(message))
+                    return
+                }
+                completion(.ok(result))
             }
             return true
 

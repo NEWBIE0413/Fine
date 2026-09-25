@@ -120,9 +120,11 @@ struct AppearanceToggle: View {
                 Color.clear.onAppear {
                     let frame = geometry.frame(in: .global)
                     center = CGPoint(x: frame.midX, y: frame.midY)
+                    ThemeTransition.toggleCenter = center
                 }
                 .onChange(of: geometry.frame(in: .global)) { _, frame in
                     center = CGPoint(x: frame.midX, y: frame.midY)
+                    ThemeTransition.toggleCenter = center
                 }
             }
         }

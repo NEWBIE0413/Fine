@@ -172,7 +172,7 @@ struct QuickModelPickerView: View {
                             .padding(.horizontal, 10)
                             .background {
                                 if provider == candidate {
-                                    RoundedRectangle(cornerRadius: 7).fill(.white)
+                                    RoundedRectangle(cornerRadius: 7).fill(FineTheme.pickerSelection)
                                         .matchedGeometryEffect(id: "provider", in: selection)
                                 }
                             }

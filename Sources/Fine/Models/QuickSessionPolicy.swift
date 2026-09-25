@@ -33,6 +33,16 @@ enum QuickSessionPolicy {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "claude"
     }
 
+    /// 런처를 거치지 않은 Claude Code 자체. 한 번 묻고 끝나는 `claude -p`는 ccv의 플래그가 필요 없다.
+    static var claudeExecutablePath: String {
+        let candidates = [
+            FinePaths.home.appendingPathComponent(".local/bin/claude", isDirectory: false).path,
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/local/bin/claude"
+    }
+
     /// 어떤 런처를 잡았는지. 플래그 모양이 다르므로 명령을 만들 때 알아야 한다.
     static var usesCcvWrapper: Bool {
         URL(fileURLWithPath: ccvExecutablePath).lastPathComponent == "ccv"

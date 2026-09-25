@@ -9,9 +9,16 @@ struct QuickHomeView: View {
     @State private var selectedEffort: QuickEffort
     @State private var proxyEnabled: Bool
     @State private var isModelPickerPresented = false
+    /// 돋보기 모드: 입력을 새 대화가 아니라 "찾을 대화의 설명"으로 받는다.
+    @State private var isFinding = false
+    @State private var findStatus = QuickFindStatus.idle
+    /// 돋보기를 누를 때마다 하나씩 늘어 입력창 테두리를 한 번 빛나게 한다.
+    @State private var composerFlash = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init() {
+    /// - Parameter finding: 돋보기 모드로 시작한다.
+    init(finding: Bool = false) {
+        _isFinding = State(initialValue: finding)
         let saved = QuickComposerPreferences.load()
         _harness = State(initialValue: saved.harness)
         _selectedModelID = State(initialValue: saved.modelID)
@@ -22,16 +29,16 @@ struct QuickHomeView: View {
     var body: some View {
         QuickHomePresentation(openTabs: appState.sessions.map(\.name)) {
             VStack(spacing: 14) {
-                QuickHomeComposer(prompt: $prompt, onSubmit: submit) {
+                QuickHomeComposer(
+                    prompt: $prompt,
+                    placeholder: isFinding ? "찾을 대화를 설명하세요 — 예: zeb 브라우저 만든 세션" : "무엇이든 물어보세요",
+                    accessibilityName: isFinding ? "찾을 대화 설명" : "새 대화 메시지",
+                    flash: composerFlash,
+                    onSubmit: submit
+                ) {
                     composerControls
                 }
-                Text(sessionModeDescription)
-                    .font(.system(size: 11))
-                    .fineTracking(11)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
+                belowComposer
             }
         }
         .fineOverlay(isPresented: $isModelPickerPresented) {
@@ -69,6 +76,17 @@ struct QuickHomeView: View {
             constrainSelectedEffort()
             persistSelection()
         }
+        .onChange(of: prompt) {
+            // 못 찾은 뒤 설명을 고치기 시작하면 지난 결과는 치운다.
+            if findStatus.isSettled { animateFind { findStatus = .idle } }
+        }
+        .task(id: findStatus) {
+            // 결과만 남은 막대는 읽을 시간을 준 뒤 저절로 접힌다.
+            guard findStatus.isSettled else { return }
+            try? await Task.sleep(for: .seconds(7))
+            guard !Task.isCancelled else { return }
+            animateFind { findStatus = .idle }
+        }
         .onChange(of: selectedEffort) { persistSelection() }
         .onChange(of: proxyEnabled) { persistSelection() }
         .onChange(of: modelCatalog.models) { _, models in
@@ -86,11 +104,118 @@ struct QuickHomeView: View {
 
     private var composerControls: some View {
         QuickHomeControls {
-            harnessPicker
+            if isFinding { findModePill } else { harnessPicker }
         } options: {
-            modelOptions
+            // 찾기는 Haiku로 정해져 있다. 모델을 고를 이유가 없다.
+            if !isFinding { modelOptions }
         } send: {
-            sendButton
+            HStack(spacing: 6) {
+                if !isFinding { findToggle }
+                sendButton
+            }
+        }
+    }
+
+    /// 새 대화 줄에서 돋보기 모드로 들어가는 문.
+    private var findToggle: some View {
+        Button { setFinding(true) } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: FineTheme.compactControlHeight, height: FineTheme.compactControlHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
+                        .fill(FineTheme.controlFill)
+                )
+        }
+        .buttonStyle(.finePress)
+        .keyboardShortcut("f", modifiers: .command)
+        .help("찾기 — 설명으로 예전 대화를 찾아 엽니다 (⌘F)")
+        .accessibilityLabel("대화 찾기")
+    }
+
+    /// 찾기 모드임을 알리고, 누르면 새 대화로 돌아간다.
+    private var findModePill: some View {
+        Button { setFinding(false) } label: {
+            FineControlPill(title: "찾기 · Haiku", trailingSymbol: "xmark") {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+        }
+        .buttonStyle(.finePress)
+        .fixedSize()
+        .keyboardShortcut("f", modifiers: .command)
+        .disabled(findStatus.isBusy)
+        .help("새 대화로 돌아가기 (⌘F)")
+        .accessibilityLabel("찾기 끝내기")
+    }
+
+    private func setFinding(_ on: Bool) {
+        animateFind {
+            isFinding = on
+            findStatus = .idle
+        }
+        if on { composerFlash += 1 }
+    }
+
+    private func animateFind(_ change: () -> Void) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.9), change)
+    }
+
+    /// 입력창 아래 한 줄. 평소에는 안내 문구이고, 찾는 동안에는 작업 막대로 바뀐다.
+    private var belowComposer: some View {
+        ZStack(alignment: .top) {
+            if findStatus == .idle {
+                Text(isFinding ? findIdleDescription : sessionModeDescription)
+                    .font(.system(size: 11))
+                    .fineTracking(11)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .transition(.opacity)
+            } else {
+                FindTaskBar(status: findStatus) { animateFind { findStatus = .idle } }
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: -8))
+                            .combined(with: .scale(scale: 0.97, anchor: .top)),
+                        removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                    ))
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var findIdleDescription: String {
+        "Haiku가 최근 대화 \(SessionFinder.candidateLimit)개에서 골라 엽니다 · 열린 탭이면 그 탭으로 갑니다"
+    }
+
+    private func find(_ query: String) {
+        guard !findStatus.isBusy else { return }
+        let started = Date()
+        animateFind { findStatus = .gathering(query: query, since: started) }
+        SessionFinder.find(query, from: appState, open: false, progress: { count in
+            animateFind { findStatus = .asking(query: query, count: count, since: started) }
+        }) { outcome in
+            switch outcome {
+            case .found(let candidate, _):
+                animateFind { findStatus = .found(title: candidate.conversation.title, wasOpen: candidate.isOpen) }
+                // 찾은 것을 한 박자 보여 주고, 막대를 거둔 뒤에 연다. 탭이 열리면 이 화면은 내려가므로
+                // 먼저 열어 버리면 막대가 접히지 못하고 화면째 사라진다.
+                let beat = reduceMotion ? 0 : 0.75
+                DispatchQueue.main.asyncAfter(deadline: .now() + beat) {
+                    animateFind { findStatus = .idle }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0 : 0.3)) {
+                        isFinding = false
+                        prompt = ""
+                        SessionFinder.open(candidate.conversation, from: appState)
+                    }
+                }
+            case .notFound(let reason):
+                animateFind { findStatus = .notFound(query: query, reason: reason) }
+            case .failed(let message):
+                animateFind { findStatus = .failed(query: query, message: message) }
+            }
         }
     }
 
@@ -113,21 +238,25 @@ struct QuickHomeView: View {
 
     private var sendButton: some View {
         Button(action: submit) {
-            Image(systemName: "arrow.up")
+            Group {
+                if findStatus.isBusy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.up")
+                }
+            }
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(trimmedPrompt.isEmpty ? Color.secondary : .white)
+                .foregroundStyle(trimmedPrompt.isEmpty ? Color.secondary : FineTheme.sendInk)
                 .frame(width: FineTheme.compactControlHeight, height: FineTheme.compactControlHeight)
                 .background(
                     RoundedRectangle(cornerRadius: FineTheme.compactControlRadius, style: .continuous)
-                        .fill(trimmedPrompt.isEmpty
-                            ? Color.black.opacity(0.05)
-                            : Color(red: 0.22, green: 0.27, blue: 0.23))
+                        .fill(trimmedPrompt.isEmpty ? FineTheme.controlFill : FineTheme.sendFill)
                 )
         }
         .buttonStyle(.finePress)
-        .disabled(trimmedPrompt.isEmpty)
-        .accessibilityLabel("대화 시작")
-        .help("대화 시작")
+        .disabled(trimmedPrompt.isEmpty || findStatus.isBusy)
+        .accessibilityLabel(isFinding ? "찾기" : "대화 시작")
+        .help(isFinding ? "찾기" : "대화 시작")
     }
 
     private var trimmedPrompt: String {
@@ -137,6 +266,11 @@ struct QuickHomeView: View {
     private func submit() {
         let initialPrompt = trimmedPrompt
         guard !initialPrompt.isEmpty else { return }
+        if isFinding {
+            // 못 찾으면 설명을 고쳐 다시 물을 수 있게 입력은 남겨 둔다.
+            find(initialPrompt)
+            return
+        }
         prompt = ""
         let configuration = currentConfiguration
         guard configuration.isAutoModel else {

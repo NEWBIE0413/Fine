@@ -66,6 +66,8 @@ struct HarnessSegmentedControl: View {
 /// 한 곳에서 그려야 셋이 어긋나지 않는다.
 struct FineControlPill<Leading: View>: View {
     let title: String
+    /// 메뉴를 여는 알약은 chevron, 모드를 끄는 알약은 xmark.
+    var trailingSymbol = "chevron.down"
     @ViewBuilder var leading: Leading
     @Environment(\.colorScheme) private var colorScheme
 
@@ -76,7 +78,7 @@ struct FineControlPill<Leading: View>: View {
                 .font(.system(size: 12, weight: .medium))
                 .fineTracking(12)
                 .lineLimit(1)
-            Image(systemName: "chevron.down")
+            Image(systemName: trailingSymbol)
                 .font(.system(size: 7, weight: .bold))
                 .foregroundStyle(.secondary.opacity(0.65))
         }
