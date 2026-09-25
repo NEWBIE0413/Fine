@@ -130,6 +130,7 @@ struct QuickHomeView: View {
         }
         .buttonStyle(.finePress)
         .keyboardShortcut("f", modifiers: .command)
+        .disabled(findStatus.isBusy)
         .help("찾기 — 설명으로 예전 대화를 찾아 엽니다 (⌘F)")
         .accessibilityLabel("대화 찾기")
     }
@@ -192,10 +193,11 @@ struct QuickHomeView: View {
 
     private func find(_ query: String) {
         guard !findStatus.isBusy else { return }
-        let started = Date()
-        animateFind { findStatus = .gathering(query: query, since: started) }
-        SessionFinder.find(query, from: appState, open: false, progress: { count in
-            animateFind { findStatus = .asking(query: query, count: count, since: started) }
+        animateFind { findStatus = .gathering(query: query, fraction: 0) }
+        SessionFinder.find(query, from: appState, open: false, reading: { fraction in
+            findStatus = .gathering(query: query, fraction: fraction)
+        }, asking: { count in
+            findStatus = .asking(query: query, count: count, since: Date())
         }) { outcome in
             switch outcome {
             case .found(let candidate, _):
@@ -206,8 +208,6 @@ struct QuickHomeView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + beat) {
                     animateFind { findStatus = .idle }
                     DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0 : 0.3)) {
-                        isFinding = false
-                        prompt = ""
                         SessionFinder.open(candidate.conversation, from: appState)
                     }
                 }
@@ -238,13 +238,7 @@ struct QuickHomeView: View {
 
     private var sendButton: some View {
         Button(action: submit) {
-            Group {
-                if findStatus.isBusy {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.up")
-                }
-            }
+            Image(systemName: "arrow.up")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(trimmedPrompt.isEmpty ? Color.secondary : FineTheme.sendInk)
                 .frame(width: FineTheme.compactControlHeight, height: FineTheme.compactControlHeight)
@@ -254,7 +248,8 @@ struct QuickHomeView: View {
                 )
         }
         .buttonStyle(.finePress)
-        .disabled(trimmedPrompt.isEmpty || findStatus.isBusy)
+        // 찾는 동안에도 새 대화는 시작할 수 있다. 막히는 건 두 번째 찾기뿐이다.
+        .disabled(trimmedPrompt.isEmpty || (isFinding && findStatus.isBusy))
         .accessibilityLabel(isFinding ? "찾기" : "대화 시작")
         .help(isFinding ? "찾기" : "대화 시작")
     }
@@ -267,7 +262,9 @@ struct QuickHomeView: View {
         let initialPrompt = trimmedPrompt
         guard !initialPrompt.isEmpty else { return }
         if isFinding {
-            // 못 찾으면 설명을 고쳐 다시 물을 수 있게 입력은 남겨 둔다.
+            // 찾기는 한 번 묻고 끝나는 일이다. 모드와 입력은 바로 돌려놓고, 진행은 아래 막대가 맡는다.
+            prompt = ""
+            animateFind { isFinding = false }
             find(initialPrompt)
             return
         }

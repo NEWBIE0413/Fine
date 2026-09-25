@@ -31,39 +31,59 @@ final class SessionFinderTests: XCTestCase {
     }
 
     private func candidate(_ title: String, id: String = UUID().uuidString.lowercased(),
-                           prompts: [String] = [], open: Bool = false) -> SessionFinder.Candidate {
+                           prompts: [String] = [], passages: [String] = [], open: Bool = false) -> SessionFinder.Candidate {
         SessionFinder.Candidate(
             conversation: QuickConversation(id: id, title: title, aiTitle: nil,
                                             modifiedAt: Date(timeIntervalSince1970: 1_790_000_000), transcriptURL: nil),
-            recentPrompts: prompts, isOpen: open
+            prompts: prompts, passages: passages, isOpen: open
         )
     }
 
     // MARK: - 후보
 
-    /// 제목은 첫 요청에서 나온다. 대화가 나중에 어디로 갔는지는 꼬리의 사용자 요청에만 있다.
-    func testRecentPromptsComeFromTheTailAndSkipToolTraffic() throws {
+    /// 제목은 첫 요청에서 나온다. 대화가 흘러간 곳은 뒤의 요청과 본문에만 있다.
+    func testDigestKeepsEveryRequestAndTheConversationTextButNotToolTraffic() throws {
+        let huge = line(["type": "user", "message": ["role": "user",
+                         "content": [["type": "tool_result", "content": String(repeating: "zeb ", count: 80_000)]]]])
         let url = try transcript(UUID().uuidString.lowercased(), lines: [
             user("이미지 분석해줘"),
-            line(["type": "assistant", "message": ["role": "assistant", "content": [["type": "text", "text": "네"]]]]),
-            line(["type": "user", "message": ["role": "user", "content": [["type": "tool_result", "content": "ls output"]]]]),
+            line(["type": "assistant", "message": ["role": "assistant",
+                  "content": [["type": "text", "text": "아치의 ZEB는 두 브라우저를 흉내 낸 것입니다"]]]]),
+            huge,
             user("<command-name>/model</command-name>"),
-            user("zeb 브라우저를\n아치에서 띄워봐"),
-            user("다크모드 체크박스가 흰색이야"),
+            user("스킬 동기화\n해줘"),
         ], modified: Date())
 
-        let prompts = SessionFinder.recentPrompts(in: url, count: 2)
-        XCTAssertEqual(prompts, ["zeb 브라우저를 아치에서 띄워봐", "다크모드 체크박스가 흰색이야"])
+        let digest = SessionFinder.digest(claudeTranscript: url)
+        XCTAssertEqual(digest.prompts, ["이미지 분석해줘", "스킬 동기화 해줘"])
+        let text = String(decoding: digest.corpus, as: UTF8.self)
+        XCTAssertTrue(text.contains("아치의 zeb는"), "assistant text is searchable, lowercased")
+        XCTAssertFalse(text.contains("zeb zeb"), "tool output is not conversation")
     }
 
-    /// 거대한 transcript에서도 꼬리만 읽는다. 잘린 첫 줄은 버려진다.
-    func testRecentPromptsReadOnlyTheTail() throws {
-        let filler = line(["type": "assistant", "message": ["role": "assistant",
-                           "content": [["type": "text", "text": String(repeating: "x", count: 4_000)]]]])
-        let url = try transcript(UUID().uuidString.lowercased(),
-                                 lines: [user("맨 처음 요청")] + Array(repeating: filler, count: 200) + [user("마지막 요청")],
-                                 modified: Date())
-        XCTAssertEqual(SessionFinder.recentPrompts(in: url, tailBytes: 20_000), ["마지막 요청"])
+    func testKeywordsDropFillerWordsAndParticles() {
+        XCTAssertEqual(SessionFinder.keywords(in: "zeb 브라우저 만든 세션 찾아줘"), ["zeb", "브라우저"])
+        XCTAssertEqual(SessionFinder.keywords(in: "방콕 숙소를 정하던 대화"), ["방콕", "숙소", "정하던"])
+    }
+
+    /// 긴 대화는 처음부터 끝까지 고르게, 찾는 말이 든 요청은 빠짐없이.
+    func testSampleSpansTheWholeConversationAndKeepsMatchingRequests() {
+        let prompts = (0..<40).map { "요청 \($0)" } + ["zeb 설치해줘"] + (41..<60).map { "요청 \($0)" }
+        let picked = SessionFinder.sample(prompts, terms: ["zeb"], count: 6)
+        XCTAssertEqual(picked.first, "요청 0")
+        XCTAssertEqual(picked.last, "요청 59")
+        XCTAssertTrue(picked.contains("zeb 설치해줘"))
+        XCTAssertLessThanOrEqual(picked.count, 6)
+    }
+
+    func testPassagesQuoteAroundTheTermWithoutBreakingCharacters() {
+        let corpus = Data(("앞부분 " + String(repeating: "가", count: 300) + " 아치의 zeb는 두 브라우저를 흉내 냈다 "
+                           + String(repeating: "나", count: 900) + " zeb 스킬 동기화").utf8)
+        let found = SessionFinder.passages(in: corpus, terms: ["zeb"], limit: 3, radius: 40)
+        XCTAssertEqual(found.count, 2, "two distant mentions, two passages")
+        XCTAssertTrue(found[0].contains("아치의 zeb는"))
+        XCTAssertFalse(found.joined().contains("\u{FFFD}"))
+        XCTAssertEqual(SessionFinder.passages(in: corpus, terms: ["없는말"], limit: 3), [])
     }
 
     func testGatherMarksOpenTabsAndKeepsNewestFirst() throws {
@@ -74,7 +94,9 @@ final class SessionFinderTests: XCTestCase {
 
         let done = expectation(description: "gathered")
         var result: [SessionFinder.Candidate] = []
-        SessionFinder.gather(openSessionIDs: [older], directory: directory, store: nil) {
+        var fractions: [Double] = []
+        SessionFinder.gather(query: "팬 소리", openSessionIDs: [older], directory: directory, store: nil,
+                             progress: { fractions.append($0) }) {
             result = $0
             done.fulfill()
         }
@@ -82,7 +104,9 @@ final class SessionFinderTests: XCTestCase {
 
         XCTAssertEqual(result.map(\.conversation.id), [newer, older])
         XCTAssertEqual(result.map(\.isOpen), [false, true])
-        XCTAssertEqual(result.first?.recentPrompts, ["Mac 발열 문제", "팬 소리가 커"])
+        XCTAssertEqual(result.first?.prompts, ["Mac 발열 문제", "팬 소리가 커"])
+        XCTAssertEqual(result.first?.passages.count, 1)
+        XCTAssertEqual(fractions.last, 1, "reading reports its real share up to the end")
     }
 
     // MARK: - 질문
@@ -90,13 +114,14 @@ final class SessionFinderTests: XCTestCase {
     func testPromptNumbersCandidatesAndCarriesQueryOpenTabsAndRecentLines() {
         let text = SessionFinder.prompt(query: "zeb 브라우저 만든 세션", candidates: [
             candidate("Mac 발열 문제"),
-            candidate("이미지 분석", prompts: ["zeb 브라우저 띄워봐"], open: true),
+            candidate("이미지 분석", prompts: ["zeb 브라우저 띄워봐"], passages: ["…아치의 zeb는…"], open: true),
         ])
         XCTAssertTrue(text.contains("찾는 것: zeb 브라우저 만든 세션"))
         XCTAssertTrue(text.contains("[1] Mac 발열 문제 | Claude"))
         XCTAssertTrue(text.contains("[2] 이미지 분석 | Claude"))
         XCTAssertTrue(text.contains("| 열린 탭"))
-        XCTAssertTrue(text.contains("최근: \"zeb 브라우저 띄워봐\""))
+        XCTAssertTrue(text.contains("요청: \"zeb 브라우저 띄워봐\""))
+        XCTAssertTrue(text.contains("본문: …아치의 zeb는…"))
     }
 
     /// 찾기 질문은 도구도, 기록도, 라우터도 없이 순정 Claude로 한 번 묻고 끝나야 한다.
@@ -162,7 +187,8 @@ final class SessionFinderTests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["FINE_LIVE_FIND"] == "1", "live Claude call")
         let list = [
             candidate("Mac 발열 문제", prompts: ["팬 소리가 너무 커"]),
-            candidate("이미지 분석", prompts: ["zeb 브라우저를 아치에 설치하고 띄워봐", "다크모드 색 정리"]),
+            candidate("오늘 추가한 옵시디언 문서 두 개", prompts: ["옵시디언 문서 정리", "스킬 동기화"],
+                      passages: ["…아치의 zeb는 내가 이 두 브라우저를 야매로 구현한 결과야…"]),
             candidate("방콕 여행 계획", prompts: ["숙소는 아속 근처"]),
         ]
         let done = expectation(description: "answered")
@@ -177,5 +203,33 @@ final class SessionFinderTests: XCTestCase {
         }
         XCTAssertEqual(picked, list[1])
         print("LIVE reason:", reason)
+    }
+
+    /// 이 기기의 실제 최근 대화로: 첫 읽기와 캐시된 두 번째 읽기가 얼마나 걸리는지, 그리고
+    /// zeb를 다룬 대화가 본문 조각을 달고 후보에 오르는지. 켰을 때만 돈다.
+    func testLiveGatherOnThisMachine() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["FINE_LIVE_FIND"] == "1", "reads real transcripts")
+        for round in 1...2 {
+            let started = Date()
+            let done = expectation(description: "gathered \(round)")
+            var result: [SessionFinder.Candidate] = []
+            SessionFinder.gather(query: "zeb 브라우저 만든 세션", openSessionIDs: []) {
+                result = $0
+                done.fulfill()
+            }
+            wait(for: [done], timeout: 120)
+            let prompt = SessionFinder.prompt(query: "zeb 브라우저 만든 세션", candidates: result)
+            let withPassages = result.filter { !$0.passages.isEmpty }
+            print("LIVE gather round \(round): \(Int(Date().timeIntervalSince(started) * 1000))ms,",
+                  "\(result.count) candidates, prompt \(prompt.count) chars, \(withPassages.count) with passages")
+            guard round == 2 else { continue }
+            let asked = Date()
+            let answered = expectation(description: "answered")
+            SessionFinder.ask(query: "zeb 브라우저 만든 세션", candidates: result) { outcome in
+                print("LIVE ask: \(Int(Date().timeIntervalSince(asked) * 1000))ms →", outcome)
+                answered.fulfill()
+            }
+            wait(for: [answered], timeout: 120)
+        }
     }
 }

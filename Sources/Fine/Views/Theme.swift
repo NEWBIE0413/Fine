@@ -33,9 +33,13 @@ enum FineTheme {
     static let glassSheenMiddle = Color.white.opacity(0.10)
     static let glassTintBottom = Color(nsColor: .windowBackgroundColor).opacity(0.08)
     static let glassEdge = Color.adaptive(light: .black.opacity(0.08), dark: .white.opacity(0.10))
-    /// 보내기 버튼. 어두운 쪽에서 짙은 녹색은 바탕에 묻히므로 밝은 면에 어두운 화살표로 뒤집는다.
-    static let sendFill = Color.adaptive(light: Color(red: 0.22, green: 0.27, blue: 0.23), dark: FinePalette.dark.ink)
-    static let sendInk = Color.adaptive(light: .white, dark: FinePalette.dark.base)
+    /// 보내기 버튼. 어두운 쪽에서 짙은 녹색은 바탕에 묻히고, 흰 면은 밤 장면 위에서 혼자 튄다.
+    /// 장면의 빛무리와 같은 푸른색으로 든다.
+    static let sendFill = Color.adaptive(
+        light: Color(red: 0.22, green: 0.27, blue: 0.23),
+        dark: Color(red: 0.25, green: 0.42, blue: 0.88)
+    )
+    static let sendInk = Color.white
     /// 찾기 모드의 색. 대화를 시작하는 초록과 겹치지 않게 푸른 쪽으로 둔다.
     static let findAccent = Color.adaptive(
         light: Color(red: 0.24, green: 0.45, blue: 0.66),

@@ -41,12 +41,25 @@ final class DarkModePaletteTests: XCTestCase {
         XCTAssertEqual(components(FineTheme.pickerSelection, in: Self.light).alpha, 1, accuracy: 0.01)
     }
 
-    func testSendButtonKeepsContrastInBothThemes() {
-        for appearance in [Self.dark, Self.light] {
-            let fill = components(FineTheme.sendFill, in: appearance).white
-            let ink = components(FineTheme.sendInk, in: appearance).white
-            XCTAssertGreaterThan(abs(fill - ink), 0.6, "\(appearance.name.rawValue)")
+    /// 보내기 화살표는 버튼 면 위에서 읽혀야 하고(대비 3:1 이상, 비텍스트 UI 기준),
+    /// 어두운 쪽에서 면이 흰색이면 안 된다 — 밤 장면 위에서 흰 사각형이 혼자 튄다.
+    func testSendButtonKeepsContrastWithoutAWhiteFaceInDark() {
+        func luminance(_ color: Color, _ appearance: NSAppearance) -> CGFloat {
+            var result: CGFloat = 0
+            appearance.performAsCurrentDrawingAppearance {
+                let c = NSColor(color).usingColorSpace(.sRGB)!
+                func linear(_ v: CGFloat) -> CGFloat { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+                result = 0.2126 * linear(c.redComponent) + 0.7152 * linear(c.greenComponent) + 0.0722 * linear(c.blueComponent)
+            }
+            return result
         }
+        for appearance in [Self.dark, Self.light] {
+            let fill = luminance(FineTheme.sendFill, appearance)
+            let ink = luminance(FineTheme.sendInk, appearance)
+            let ratio = (max(fill, ink) + 0.05) / (min(fill, ink) + 0.05)
+            XCTAssertGreaterThan(ratio, 3, "\(appearance.name.rawValue)")
+        }
+        XCTAssertLessThan(components(FineTheme.sendFill, in: Self.dark).white, 0.7)
     }
 
     /// 색을 풀어내는 곳은 결국 SwiftUI다. 실제로 그려서 레일 선택 칸이

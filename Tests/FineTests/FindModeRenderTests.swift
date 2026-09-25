@@ -39,10 +39,9 @@ final class FindModeRenderTests: XCTestCase {
         let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(".build/home-design-review")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let started = Date(timeIntervalSinceNow: -2.4)
         let states: [QuickFindStatus] = [
-            .gathering(query: "zeb 브라우저 만든 세션", since: Date()),
-            .asking(query: "zeb 브라우저 만든 세션", count: 80, since: started),
+            .gathering(query: "zeb 브라우저 만든 세션", fraction: 0.5),
+            .asking(query: "zeb 브라우저 만든 세션", count: 80, since: Date(timeIntervalSinceNow: -3)),
             .found(title: "이미지 분석", wasOpen: true),
             .notFound(query: "zeb", reason: "zeb 브라우저를 만든 대화는 최근 목록에 없습니다."),
             .failed(query: "zeb", message: "Invalid API key · Please run /login"),
@@ -64,6 +63,8 @@ final class FindModeRenderTests: XCTestCase {
                 RunLoop.main.run(until: Date().addingTimeInterval(0.05))
             }
             XCTAssertGreaterThan(hosting.fittingSize.height, 200)
+            XCTAssertEqual(FindTaskBar.percent(for: states[0], at: Date()), 22)
+            XCTAssertEqual(FindTaskBar.percent(for: states[2], at: Date()), 100)
             let bitmap = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
             hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
             try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))

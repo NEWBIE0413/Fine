@@ -223,7 +223,7 @@ enum ControlCommands {
             let shouldOpen = r.bool("open") ?? true
             let started = Date()
             var count = 0
-            SessionFinder.find(query, from: entry.state, open: shouldOpen, progress: { count = $0 }) { outcome in
+            SessionFinder.find(query, from: entry.state, open: shouldOpen, asking: { count = $0 }) { outcome in
                 var result: [String: Any] = [
                     "query": query, "candidates": count, "ms": Int(Date().timeIntervalSince(started) * 1000),
                 ]
